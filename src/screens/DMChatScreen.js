@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -6,9 +6,11 @@ import {
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { subscribeToDMMessages, sendDM, markDMRead, getOrCreateDM } from "@services/dmService";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 export default function DMChatScreen({ route, navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { otherUid, otherNickname, otherEmoji } = route.params;
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -118,7 +120,7 @@ function formatTime(ms) {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   list: { padding: 16, paddingBottom: 8 },
   msgRow: { flexDirection: "row", marginBottom: 12, alignItems: "flex-end", gap: 8 },

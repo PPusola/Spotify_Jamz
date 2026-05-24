@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from "react-native";
@@ -6,9 +6,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { subscribeToDMList, getOrCreateDM } from "@services/dmService";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 export default function DMListScreen({ navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const { profile } = useProfile();
   const [convos, setConvos] = useState([]);
@@ -91,7 +93,7 @@ function formatTime(ms) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   container: { flex: 1, paddingHorizontal: 20 },
   title: { fontSize: 22, fontWeight: "bold", color: COLORS.textPrimary, marginTop: 8, marginBottom: 20 },

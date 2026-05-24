@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, View, Text, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
+import { useTheme } from "@hooks/useTheme";
 import { profileExists } from "@services/userService";
 import { getMe, getTopArtists, getTopGenres, getTopTracks } from "@services/spotify";
-import { COLORS } from "@constants";
 
 import LoginScreen from "@screens/LoginScreen";
 import ProfileSetupScreen from "@screens/ProfileSetupScreen";
@@ -26,13 +27,6 @@ import DMChatScreen from "@screens/DMChatScreen";
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const stackOptions = {
-  headerStyle: { backgroundColor: COLORS.surface, shadowColor: "transparent", elevation: 0, borderBottomWidth: 0 },
-  headerTintColor: COLORS.textPrimary,
-  headerTitleStyle: { fontWeight: "bold", fontSize: 17 },
-  cardStyle: { backgroundColor: COLORS.background },
-};
-
 const TAB_ICONS = {
   Home: { active: "🎵", inactive: "🎵" },
   Discover: { active: "🔥", inactive: "🔥" },
@@ -42,6 +36,8 @@ const TAB_ICONS = {
 };
 
 function TabIcon({ name, focused }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   return (
     <View style={[styles.tabIconWrap, focused && styles.tabIconWrapActive]}>
       <Text style={[styles.tabIconEmoji, { opacity: focused ? 1 : 0.45 }]}>
@@ -52,10 +48,23 @@ function TabIcon({ name, focused }) {
 }
 
 function MainTabs() {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const insets = useSafeAreaInsets();
+  const tabBarStyle = useMemo(
+    () => [
+      styles.tabBar,
+      {
+        height: 64 + insets.bottom,
+        paddingBottom: 10 + insets.bottom,
+      },
+    ],
+    [styles.tabBar, insets.bottom]
+  );
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        tabBarStyle: styles.tabBar,
+        tabBarStyle,
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
         tabBarLabelStyle: styles.tabLabel,
@@ -74,14 +83,25 @@ function MainTabs() {
   );
 }
 
-const Loader = () => (
-  <View style={styles.loader}>
-    <Text style={styles.loaderLogo}>🎵</Text>
-    <ActivityIndicator color={COLORS.primary} size="large" style={{ marginTop: 16 }} />
-  </View>
-);
+const Loader = () => {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  return (
+    <View style={styles.loader}>
+      <Text style={styles.loaderLogo}>🎵</Text>
+      <ActivityIndicator color={COLORS.primary} size="large" style={{ marginTop: 16 }} />
+    </View>
+  );
+};
 
 export default function AppNavigator() {
+  const COLORS = useTheme();
+  const stackOptions = useMemo(() => ({
+    headerStyle: { backgroundColor: COLORS.surface, shadowColor: "transparent", elevation: 0, borderBottomWidth: 0 },
+    headerTintColor: COLORS.textPrimary,
+    headerTitleStyle: { fontWeight: "bold", fontSize: 17 },
+    cardStyle: { backgroundColor: COLORS.background },
+  }), [COLORS]);
   const { user, spotifyToken, loading } = useAuth();
   const [checkingProfile, setCheckingProfile] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
@@ -175,7 +195,7 @@ export default function AppNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   tabBar: {
     backgroundColor: COLORS.surface,
     borderTopColor: COLORS.surfaceAlt,

@@ -54,7 +54,9 @@ async function spotifyFetch(endpoint, accessToken, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `Spotify API error: ${res.status}`);
+    const msg = err?.error?.message || `Spotify API error`;
+    const reason = err?.error?.reason ? ` (${err.error.reason})` : "";
+    throw new Error(`${msg}${reason} [HTTP ${res.status} ${endpoint}]`);
   }
 
   return res.status === 204 ? null : res.json();
@@ -163,6 +165,49 @@ export async function seekTo(positionMs, accessToken) {
     accessToken,
     { method: "PUT" }
   );
+}
+
+// ─── Playlists ────────────────────────────────────────────────────────────────
+
+/**
+ * Create a Spotify playlist for the current user and add the given track URIs.
+ * Returns { id, url } — url opens the playlist in the Spotify app/web.
+ *
+ * Requires the playlist-modify-private (and/or -public) scope. If the token
+ * predates adding that scope, Spotify will return 403 and the user will need
+ * to log out and reconnect to grant it.
+ */
+export async function createPlaylistWithTracks({
+  name,
+  description = "",
+  trackUris = [],
+  isPublic = false,
+  accessToken,
+}) {
+  const me = await spotifyFetch("/me", accessToken);
+  const uid = me?.id;
+  if (!uid) throw new Error("Could not read Spotify user id");
+
+  const playlist = await spotifyFetch(`/users/${uid}/playlists`, accessToken, {
+    method: "POST",
+    body: JSON.stringify({ name, description, public: isPublic }),
+  });
+  if (!playlist?.id) throw new Error("Spotify did not return a playlist id");
+
+  // Spotify caps addPlaylistItems at 100 URIs per call.
+  const uris = (trackUris || []).filter(Boolean);
+  for (let i = 0; i < uris.length; i += 100) {
+    const slice = uris.slice(i, i + 100);
+    await spotifyFetch(`/playlists/${playlist.id}/tracks`, accessToken, {
+      method: "POST",
+      body: JSON.stringify({ uris: slice }),
+    });
+  }
+
+  return {
+    id: playlist.id,
+    url: playlist.external_urls?.spotify ?? `https://open.spotify.com/playlist/${playlist.id}`,
+  };
 }
 
 // ─── Stats APIs ───────────────────────────────────────────────────────────────

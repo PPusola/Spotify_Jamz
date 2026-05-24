@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   Modal, Animated, Dimensions,
@@ -11,7 +11,7 @@ import { getPublicUsers, getAlreadySeen, likeUser, passUser } from "@services/ma
 import { generateAndSaveMixtape } from "@services/mixtapeService";
 import { getVibe, matchLabel, matchColor } from "@utils/similarity";
 import { mlScoreCandidates } from "@utils/mlCompatibility";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
 
@@ -19,6 +19,7 @@ const { width: SW } = Dimensions.get("window");
 const SWIPE_THRESHOLD = SW * 0.28;
 
 function GradientBar({ progress, height = 5, style }) {
+  const COLORS = useTheme();
   const w = `${Math.min(100, Math.max(0, progress * 100))}%`;
   return (
     <View style={[{ height, backgroundColor: COLORS.surfaceHigh, borderRadius: height / 2, overflow: "hidden" }, style]}>
@@ -32,6 +33,8 @@ function GradientBar({ progress, height = 5, style }) {
 }
 
 export default function DiscoverScreen({ navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { user, spotifyToken } = useAuth();
   const { profile } = useProfile();
 
@@ -258,7 +261,7 @@ export default function DiscoverScreen({ navigation }) {
       {/* Match modal */}
       <Modal visible={!!matchModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <LinearGradient colors={["#1A0A3C", "#0D0D1A"]} style={styles.modalCard}>
+          <LinearGradient colors={[COLORS.cardBannerStart, COLORS.cardBannerEnd]} style={styles.modalCard}>
             <Text style={styles.modalSparkle}>🎉</Text>
             <Text style={styles.matchTitle}>It's a Match!</Text>
             <Text style={styles.matchSub}>
@@ -294,6 +297,8 @@ export default function DiscoverScreen({ navigation }) {
 }
 
 function CardContent({ card, vibe, score }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const toArr = v => Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : []);
   const genres = toArr(card.topGenres).slice(0, 4);
   const artists = toArr(card.topArtists).slice(0, 4);
@@ -303,7 +308,7 @@ function CardContent({ card, vibe, score }) {
     <View style={styles.cardInner}>
       {/* Gradient header section */}
       <LinearGradient
-        colors={["#2A0A50", "#1E0A3C", "#130828"]}
+        colors={[COLORS.cardBannerStart, COLORS.cardBannerEnd, COLORS.background]}
         style={styles.cardHeader}
       >
         {vibe && (
@@ -359,7 +364,7 @@ function CardContent({ card, vibe, score }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 },
   centered: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center", padding: 32 },
 

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
-import { SPOTIFY_CLIENT_ID } from "@env";
+import { onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
+import { SPOTIFY_CLIENT_ID, CUSTOM_TOKEN_URL } from "@env";
 import { auth } from "@services/firebase";
 import { getMe } from "@services/spotify";
 
@@ -36,25 +36,56 @@ async function fetchRefreshedToken(refreshToken) {
   return res.json();
 }
 
-async function ensureFirebaseUser() {
+async function exchangeForFirebaseToken(spotifyAccessToken) {
+  if (!CUSTOM_TOKEN_URL) {
+    throw new Error(
+      "CUSTOM_TOKEN_URL is not set in .env — deploy the worker (see worker/README.md) and set the URL."
+    );
+  }
+  const res = await withTimeout(
+    fetch(CUSTOM_TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spotifyAccessToken }),
+    }),
+    10000,
+    "Firebase custom-token exchange"
+  );
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.firebaseToken) {
+    throw new Error(json?.error || `Token exchange failed (${res.status})`);
+  }
+  return json;
+}
+
+/**
+ * Get or create the Firebase user that corresponds to this Spotify account.
+ * Same Spotify id always maps to the same Firebase UID (spotify_<id>), so
+ * profile data is preserved across devices and reinstalls.
+ */
+async function ensureFirebaseUser(spotifyAccessToken) {
+  // Wait for AsyncStorage-backed persistence to hydrate; if a session is
+  // already active for this Spotify account we don't need to round-trip.
+  if (typeof auth.authStateReady === "function") {
+    await withTimeout(auth.authStateReady(), 5000, "Firebase authStateReady");
+  } else {
+    await withTimeout(
+      new Promise((resolve) => {
+        const unsub = onAuthStateChanged(auth, () => { unsub(); resolve(); });
+      }),
+      5000,
+      "Firebase auth state lookup"
+    );
+  }
   if (auth.currentUser) return auth.currentUser;
 
-  const existingUser = await withTimeout(
-    new Promise((resolve) => {
-      const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-        unsubscribe();
-        resolve(firebaseUser);
-      });
-    }),
-    5000,
-    "Firebase auth state lookup"
-  );
-  if (existingUser) return existingUser;
-
+  // No active session — exchange Spotify access token for a Firebase custom
+  // token via the Cloudflare Worker, then sign in with it.
+  const { firebaseToken } = await exchangeForFirebaseToken(spotifyAccessToken);
   const credential = await withTimeout(
-    signInAnonymously(auth),
+    signInWithCustomToken(auth, firebaseToken),
     8000,
-    "Firebase anonymous sign-in"
+    "Firebase custom-token sign-in"
   );
   return credential.user;
 }
@@ -119,7 +150,7 @@ export function AuthProvider({ children }) {
         }
 
         if (activeToken) {
-          const firebaseUser = await ensureFirebaseUser();
+          const firebaseUser = await ensureFirebaseUser(activeToken);
           setUser({ uid: firebaseUser.uid, spotifyId });
           setToken(activeToken);
         }
@@ -150,7 +181,7 @@ export function AuthProvider({ children }) {
   // Called by LoginScreen after a successful code exchange
   const saveTokens = async ({ access_token, refresh_token, expires_in = 3600 }) => {
     await _persist(access_token, refresh_token, expires_in);
-    const firebaseUser = await ensureFirebaseUser();
+    const firebaseUser = await ensureFirebaseUser(access_token);
     let spotifyId = null;
 
     try {
@@ -171,7 +202,14 @@ export function AuthProvider({ children }) {
       AsyncStorage.removeItem(TOKEN_KEY),
       AsyncStorage.removeItem(REFRESH_KEY),
       AsyncStorage.removeItem(EXPIRES_KEY),
+      AsyncStorage.removeItem(SPOTIFY_ID_KEY),
     ]);
+    // Drop the Firebase session too so a different Spotify account on next
+    // login doesn't reuse the old Firebase UID.
+    if (auth.currentUser) {
+      try { await auth.signOut(); } catch {}
+    }
+    setUser(null);
     setToken(null);
   };
 

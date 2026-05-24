@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Switch, ActivityIndicator, Image, Alert,
 } from "react-native";
 import { createProfile } from "@services/userService";
 import { useAuth } from "@hooks/useAuth";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 const EMOJI_OPTIONS = [
   "🎵","🎧","🎸","🎹","🎺","🎻","🥁","🎤",
@@ -15,6 +15,8 @@ const EMOJI_OPTIONS = [
 ];
 
 export default function ProfileSetupScreen({ navigation, route }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const spotifyProfile = route.params?.spotifyProfile;
 
@@ -226,6 +228,8 @@ export default function ProfileSetupScreen({ navigation, route }) {
 // ─── Helper component ─────────────────────────────────────────────────────────
 
 function InfoRow({ label, value }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoRowLabel}>{label}</Text>
@@ -236,7 +240,7 @@ function InfoRow({ label, value }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   scroll: {
     flex: 1,
     backgroundColor: COLORS.background,

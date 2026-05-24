@@ -1,11 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 export default function ChatPanel({ messages, currentUserId, onSend }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const [text, setText] = useState("");
 
   const handleSend = () => {
@@ -80,7 +82,7 @@ export default function ChatPanel({ messages, currentUserId, onSend }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1 },
   listContent: { paddingHorizontal: 4, paddingBottom: 8 },
 

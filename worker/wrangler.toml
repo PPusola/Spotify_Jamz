@@ -1,0 +1,7 @@
+name = "tunematch-auth"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+# The FIREBASE_SERVICE_ACCOUNT secret is set via:
+#   wrangler secret put FIREBASE_SERVICE_ACCOUNT
+# Paste the entire service-account JSON (one line) when prompted.

@@ -6,6 +6,10 @@ npm-debug.*
 # Expo prebuild output — generated, do not commit
 android/
 ios/
+
+# Worker build/cache (worker/ source is committed; this hides its build cache)
+worker/.wrangler/
+worker/node_modules/
 *.jks
 *.p8
 *.p12

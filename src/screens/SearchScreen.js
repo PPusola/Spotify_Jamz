@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, Alert,
@@ -7,9 +7,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { searchTracks } from "@services/spotify";
 import { useAuth } from "@hooks/useAuth";
 import { useRoomContext } from "@hooks/useRoomContext";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 export default function SearchScreen({ route, navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { spotifyToken } = useAuth();
   const { broadcastRef } = useRoomContext();
   const [query, setQuery] = useState("");
@@ -135,7 +137,7 @@ export default function SearchScreen({ route, navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background, padding: 16 },
 
   searchRow: { flexDirection: "row", gap: 10, marginBottom: 20 },

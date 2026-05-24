@@ -11,6 +11,8 @@ export const SPOTIFY_SCOPES = [
   "user-top-read",          // ← needed for top artists/genres
   "user-read-private",      // ← needed for profile info
   "user-read-email",        // ← needed for profile info
+  "playlist-modify-private", // ← create private mixtape playlists
+  "playlist-modify-public",  // ← in case the user wants a public playlist
 ];
 
 // How often (ms) clients re-sync position with host to prevent drift

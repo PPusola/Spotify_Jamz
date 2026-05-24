@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 const PALETTE = [
   "#E91E8C", "#7B5CF5", "#06B6D4", "#F59E0B",
@@ -45,6 +45,7 @@ export default function AvatarCircle({
   fontSize,
   style,
 }) {
+  const COLORS = useTheme();
   const initials = getInitials(name);
   const bgColor = color ?? getAvatarColor(name);
   const fSize = fontSize ?? Math.round(size * 0.36);

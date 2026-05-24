@@ -1,7 +1,7 @@
 import React from "react";
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 /**
  * A pink→purple gradient CTA button.
@@ -28,6 +28,7 @@ export default function GradientButton({
   gradientStyle,
   labelStyle,
 }) {
+  const COLORS = useTheme();
   const gradColors = disabled
     ? ["#3A3A5A", "#3A3A5A"]
     : (colors ?? [COLORS.gradientStart, COLORS.gradientEnd]);

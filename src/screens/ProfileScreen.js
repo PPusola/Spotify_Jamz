@@ -15,7 +15,7 @@ import {
 import { uploadProfilePhoto, deleteProfilePhoto } from "@services/photoService";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
-import { COLORS } from "@constants";
+import { useTheme, useThemeControl } from "@hooks/useTheme";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
 
@@ -31,6 +31,9 @@ const EMOJI_OPTIONS = [
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
   const { profile } = useProfile();
+  const COLORS = useTheme();
+  const { theme, setTheme } = useThemeControl();
+  const styles = React.useMemo(() => makeStyles(COLORS), [COLORS]);
 
   const [nickname, setNickname] = useState(profile?.nickname ?? "");
   const [selectedEmoji, setSelectedEmoji] = useState(profile?.emoji ?? "🎵");
@@ -158,6 +161,10 @@ export default function ProfileScreen({ navigation }) {
     } catch (e) {
       Alert.alert("Error", e.message);
     }
+  };
+
+  const handleToggleTheme = async (next) => {
+    await setTheme(next);
   };
 
   const handleResetPassword = () => {
@@ -424,6 +431,24 @@ export default function ProfileScreen({ navigation }) {
               />
             </View>
 
+            {/* Theme */}
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingTitle}>
+                  {theme === "dark" ? "🌙 Dark mode" : "☀️ Light mode"}
+                </Text>
+                <Text style={styles.settingSub}>
+                  Switches the whole app instantly
+                </Text>
+              </View>
+              <Switch
+                value={theme === "dark"}
+                onValueChange={(on) => handleToggleTheme(on ? "dark" : "light")}
+                trackColor={{ false: COLORS.surfaceHigh, true: COLORS.primary }}
+                thumbColor="#fff"
+              />
+            </View>
+
             {/* Reset password */}
             <TouchableOpacity
               style={styles.settingRow}
@@ -433,6 +458,19 @@ export default function ProfileScreen({ navigation }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.settingTitle}>🔑 Reset password</Text>
                 <Text style={styles.settingSub}>Opens Spotify password reset</Text>
+              </View>
+              <Text style={styles.settingChevron}>›</Text>
+            </TouchableOpacity>
+
+            {/* Log out */}
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => { setSettingsOpen(false); handleLogout(); }}
+              activeOpacity={0.7}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingTitle, { color: COLORS.error }]}>⇄ Log out</Text>
+                <Text style={styles.settingSub}>Sign out of Spotify and TuneMatch</Text>
               </View>
               <Text style={styles.settingChevron}>›</Text>
             </TouchableOpacity>
@@ -475,7 +513,7 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   scroll: { flex: 1 },
   container: { padding: 22, paddingBottom: 48, alignItems: "center" },

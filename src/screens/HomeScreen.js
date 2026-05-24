@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, StatusBar, ScrollView,
@@ -7,11 +7,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { createRoom, joinRoom } from "@services/roomService";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
 
 export default function HomeScreen({ navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const { profile } = useProfile();
   const [roomCode, setRoomCode] = useState("");
@@ -76,7 +78,7 @@ export default function HomeScreen({ navigation }) {
       {/* Create room card */}
       <View style={styles.card}>
         <LinearGradient
-          colors={["#2A0A4A", "#1A0835"]}
+          colors={[COLORS.cardBannerStart, COLORS.cardBannerEnd]}
           style={styles.createBanner}
         >
           <Text style={styles.createBannerEmoji}>🎵</Text>
@@ -138,7 +140,7 @@ export default function HomeScreen({ navigation }) {
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={["#2A0A4A", "#1E1E3A"]}
+            colors={[COLORS.cardGradientStart, COLORS.cardGradientEnd]}
             style={styles.tileGradient}
           >
             <Text style={styles.tileEmoji}>🔥</Text>
@@ -153,7 +155,7 @@ export default function HomeScreen({ navigation }) {
           activeOpacity={0.8}
         >
           <LinearGradient
-            colors={["#1A0840", "#1E1E3A"]}
+            colors={[COLORS.cardGradientAltStart, COLORS.cardGradientAltEnd]}
             style={styles.tileGradient}
           >
             <Text style={styles.tileEmoji}>💜</Text>
@@ -166,7 +168,7 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   scroll: { flex: 1, backgroundColor: COLORS.background },
   container: { paddingHorizontal: 22, paddingTop: 60, paddingBottom: 40 },
 

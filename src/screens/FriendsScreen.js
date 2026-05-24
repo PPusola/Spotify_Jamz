@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   TextInput, ActivityIndicator, Alert,
@@ -13,13 +13,15 @@ import {
   subscribeToPendingRequests, checkRelationship,
 } from "@services/friendRequestService";
 import { getOrCreateDM } from "@services/dmService";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
 
 const TABS = ["Find", "Requests", "Friends"];
 
 export default function FriendsScreen({ navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const { profile } = useProfile();
   const [activeTab, setActiveTab] = useState("Find");
@@ -299,7 +301,7 @@ export default function FriendsScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   container: { flex: 1, paddingHorizontal: 20 },
 

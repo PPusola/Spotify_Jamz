@@ -11,4 +11,5 @@ module.exports = {
   SPOTIFY_REDIRECT_URI: 'spotifyjamsesh://callback',
   CLOUDINARY_CLOUD_NAME: 'test-cloud',
   CLOUDINARY_UPLOAD_PRESET: 'test-preset',
+  CUSTOM_TOKEN_URL: 'https://test-worker.workers.dev',
 };

@@ -5,16 +5,24 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import AppNavigator from "@navigation/AppNavigator";
 import { AuthProvider } from "@hooks/useAuth";
 import { RoomProvider } from "@hooks/useRoomContext";
+import { ThemeProvider, useThemeControl } from "@hooks/useTheme";
+
+function ThemedStatusBar() {
+  const { theme } = useThemeControl();
+  return <StatusBar style={theme === "light" ? "dark" : "light"} />;
+}
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <RoomProvider>
-          <StatusBar style="light" />
-          <AppNavigator />
-        </RoomProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <RoomProvider>
+            <ThemedStatusBar />
+            <AppNavigator />
+          </RoomProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }

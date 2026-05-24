@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, Image,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
@@ -13,9 +13,11 @@ import {
 } from "@services/matchService";
 import { getPrivateProfile } from "@services/userService";
 import { createRoom } from "@services/roomService";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 export default function MatchChatScreen({ route, navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { matchId, otherNickname, otherEmoji, otherUid } = route.params;
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -362,6 +364,8 @@ export default function MatchChatScreen({ route, navigation }) {
 }
 
 function AvatarBubble({ url, emoji, label }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   return (
     <View style={styles.avatarWrap}>
       {url
@@ -378,7 +382,7 @@ function formatTime(ms) {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
 
   headerMixtapeBtn: {

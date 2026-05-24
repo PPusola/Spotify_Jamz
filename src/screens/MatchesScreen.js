@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert,
@@ -7,12 +7,14 @@ import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { getMatches, getMatchOtherProfile } from "@services/matchService";
 import { createRoom } from "@services/roomService";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 import { matchLabel, matchColor } from "@utils/similarity";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
 
 export default function MatchesScreen({ navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { user } = useAuth();
   const { profile } = useProfile();
   const [matches, setMatches] = useState([]);
@@ -130,7 +132,7 @@ export default function MatchesScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   centered: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center", padding: 32 },
   emptyEmoji: { fontSize: 56, marginBottom: 16 },

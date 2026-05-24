@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   ActivityIndicator, Image,
@@ -7,17 +7,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "@hooks/useAuth";
 import { fetchUserStats } from "@services/spotify";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 
 const TIME_RANGES = ["4 Weeks", "6 Months", "All Time"];
 
-const BAR_COLORS = [
-  [COLORS.gradientStart, COLORS.gradientEnd],
-  ["#06B6D4", "#3B82F6"],
-  ["#10B981", "#F59E0B"],
-];
-
 export default function StatsScreen({ navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const BAR_COLORS = useMemo(() => ([
+    [COLORS.gradientStart, COLORS.gradientEnd],
+    ["#06B6D4", "#3B82F6"],
+    ["#10B981", "#F59E0B"],
+  ]), [COLORS]);
   const { spotifyToken } = useAuth();
   const [activeTab, setActiveTab] = useState("4 Weeks");
   const [loading, setLoading] = useState(true);
@@ -108,6 +109,8 @@ export default function StatsScreen({ navigation }) {
 }
 
 function ArtistRow({ artist, rank, colorPair }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const imageUrl = artist.images?.[0]?.url;
   const popularity = artist.popularity ?? 0;
 
@@ -144,6 +147,8 @@ function ArtistRow({ artist, rank, colorPair }) {
 }
 
 function TrackRow({ track, rank, colorPair }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const imageUrl = track.album?.images?.[0]?.url;
   const popularity = track.popularity ?? 0;
   const artistNames = track.artists?.map(a => a.name).join(", ") ?? "";
@@ -176,7 +181,7 @@ function TrackRow({ track, rank, colorPair }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   container: { flex: 1, paddingHorizontal: 20 },
   topBar: {

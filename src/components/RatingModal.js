@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 import GradientButton from "@components/GradientButton";
 
 export default function RatingModal({ visible, trackName, artistName, onRate, onClose }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const [rating, setRating] = useState(5);
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function RatingModal({ visible, trackName, artistName, onRate, on
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.75)",

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   StatusBar, Alert,
@@ -7,7 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSpotifyAuth } from "@services/spotify";
 import { useAuth } from "@hooks/useAuth";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 import { SPOTIFY_CLIENT_ID } from "@env";
 import { redirectUri } from "@services/spotify";
 
@@ -20,6 +20,8 @@ const SERVICES = [
 ];
 
 export default function LoginScreen() {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { request, response, promptAsync } = useSpotifyAuth();
   const { saveTokens } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -56,6 +58,8 @@ export default function LoginScreen() {
       const data = await result.json();
       if (data.access_token) {
         await AsyncStorage.removeItem(PKCE_KEY);
+        await AsyncStorage.setItem("@jamz_spotify_scope", data.scope || "");
+        console.log("[Spotify] granted scopes:", data.scope);
         await saveTokens(data);
         setError(null);
       } else {
@@ -90,7 +94,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={["#0D0D1A", "#131325", "#0D0D1A"]}
+      colors={[COLORS.background, COLORS.surface, COLORS.background]}
       locations={[0, 0.5, 1]}
       style={styles.container}
     >
@@ -171,7 +175,7 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: "center",

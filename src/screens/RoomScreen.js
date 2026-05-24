@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, Image, Alert,
   ScrollView, KeyboardAvoidingView, Platform,
@@ -8,7 +8,7 @@ import { useRoom } from "@hooks/useRoom";
 import { useRoomContext } from "@hooks/useRoomContext";
 import { useAuth } from "@hooks/useAuth";
 import { subscribeToChat, sendChatMessage, rateTrack } from "@services/roomService";
-import { COLORS } from "@constants";
+import { useTheme } from "@hooks/useTheme";
 import ChatPanel from "@components/ChatPanel";
 import RatingModal from "@components/RatingModal";
 import GradientButton from "@components/GradientButton";
@@ -16,6 +16,8 @@ import GradientButton from "@components/GradientButton";
 const REACTIONS = ["🔥", "💜", "🎸", "🎵", "😊"];
 
 export default function RoomScreen({ route, navigation }) {
+  const COLORS = useTheme();
+  const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { roomCode, isHost, displayName } = route.params;
   const { room, error, broadcastPlayback, leave } = useRoom(roomCode, isHost);
   const { broadcastRef } = useRoomContext();
@@ -89,7 +91,7 @@ export default function RoomScreen({ route, navigation }) {
         {playback?.albumArt ? (
           <Image source={{ uri: playback.albumArt }} style={styles.albumArt} />
         ) : (
-          <LinearGradient colors={["#2A0A50", "#1A0835"]} style={styles.albumArtPlaceholder}>
+          <LinearGradient colors={[COLORS.cardBannerStart, COLORS.cardBannerEnd]} style={styles.albumArtPlaceholder}>
             <Text style={styles.albumArtEmoji}>🎵</Text>
           </LinearGradient>
         )}
@@ -214,7 +216,7 @@ export default function RoomScreen({ route, navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (COLORS) => StyleSheet.create({
   container: {
     flex: 1, backgroundColor: COLORS.background,
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8,
