@@ -38,6 +38,7 @@ export default function ProfileSetupScreen({ navigation, route }) {
     setSaving(true);
     try {
       await createProfile(user.uid, {
+        spotifyId: user.spotifyId ?? spotifyProfile?.id ?? null,
         nickname: nickname.trim(),
         emoji: selectedEmoji,
         isPublic,
@@ -46,6 +47,7 @@ export default function ProfileSetupScreen({ navigation, route }) {
         followerCount: spotifyProfile?.followers?.total ?? 0,
         topArtists: (route.params?.topArtists ?? []).filter(Boolean),
         topGenres: (route.params?.topGenres ?? []).filter(Boolean),
+        topTracks: (route.params?.topTracks ?? []).filter(Boolean),
       });
 
       route.params?.onProfileCreated?.();

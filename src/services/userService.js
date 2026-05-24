@@ -1,7 +1,20 @@
 import { db } from "./firebase";
-import { ref, set, get, update, onValue, off, serverTimestamp } from "firebase/database";
+import {
+  ref,
+  set,
+  get,
+  update,
+  onValue,
+  off,
+  serverTimestamp,
+  query,
+  orderByChild,
+  startAt,
+  endAt,
+} from "firebase/database";
 
 const USERS = "users";
+const USER_PRIVATE = "userPrivate";
 
 // ─── Profile CRUD ─────────────────────────────────────────────────────────────
 
@@ -25,6 +38,7 @@ export async function createProfile(uid, profileData) {
     ...profileData,
     topGenres: cleanArray(profileData.topGenres),
     topArtists: cleanArray(profileData.topArtists),
+    topTracks: cleanArray(profileData.topTracks),
     spotifyDisplayName: clean(profileData.spotifyDisplayName),
     spotifyAvatar: clean(profileData.spotifyAvatar),
     followerCount: clean(profileData.followerCount),
@@ -79,21 +93,57 @@ export async function setCurrentTrack(uid, trackInfo) {
   });
 }
 
+// ─── Private profile (photos + socials) ──────────────────────────────────────
+
+/**
+ * Read the current user's private profile (photos, instagram, snapchat).
+ * Only readable by the owner per security rules.
+ */
+export async function getPrivateProfile(uid) {
+  const snap = await get(ref(db, `${USER_PRIVATE}/${uid}`));
+  return snap.exists() ? snap.val() : { photos: [], instagram: "", snapchat: "" };
+}
+
+/**
+ * Subscribe to the owner's private profile in real time.
+ */
+export function subscribeToPrivateProfile(uid, onUpdate) {
+  const r = ref(db, `${USER_PRIVATE}/${uid}`);
+  onValue(r, (snap) => {
+    onUpdate(snap.val() ?? { photos: [], instagram: "", snapchat: "" });
+  });
+  return () => off(r);
+}
+
+/**
+ * Replace photo list and/or social handles for the current user.
+ * Pass undefined for any field you want to leave unchanged.
+ */
+export async function updatePrivateProfile(uid, { photos, instagram, snapchat }) {
+  const updates = {};
+  if (photos !== undefined) {
+    updates.photos = (photos || []).filter(
+      (u) => typeof u === "string" && u.length > 0 && u.length <= 500
+    );
+  }
+  if (instagram !== undefined) updates.instagram = (instagram || "").slice(0, 50);
+  if (snapchat !== undefined) updates.snapchat = (snapchat || "").slice(0, 50);
+  await update(ref(db, `${USER_PRIVATE}/${uid}`), updates);
+}
+
 /**
  * Search public users by nickname (simple prefix match).
  * Firebase RTDB doesn't support full-text search so we use
  * orderByChild + startAt + endAt for prefix matching.
  */
 export async function searchPublicUsers(nickname) {
-  const { query, ref: dbRef, orderByChild, startAt, endAt, get: dbGet } =
-    await import("firebase/database");
   const q = query(
-    dbRef(db, USERS),
+    ref(db, USERS),
     orderByChild("nickname"),
     startAt(nickname),
     endAt(nickname + "\uf8ff")
   );
-  const snapshot = await dbGet(q);
+  const snapshot = await get(q);
   if (!snapshot.exists()) return [];
 
   return Object.entries(snapshot.val())

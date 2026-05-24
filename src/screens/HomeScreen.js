@@ -61,19 +61,10 @@ export default function HomeScreen({ navigation }) {
 
       {/* Top bar */}
       <View style={styles.topBar}>
-        <View>
-          <Text style={styles.appName}>
-            <Text style={styles.appNameWhite}>Tune</Text>
-            <Text style={styles.appNamePink}>Match</Text>
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.avatarBtn}
-          onPress={() => navigation.navigate("Profile")}
-          activeOpacity={0.8}
-        >
-          <AvatarCircle name={displayName} size={44} />
-        </TouchableOpacity>
+        <Text style={styles.appName}>
+          <Text style={styles.appNameWhite}>Tune</Text>
+          <Text style={styles.appNamePink}>Match</Text>
+        </Text>
       </View>
 
       {/* Greeting */}

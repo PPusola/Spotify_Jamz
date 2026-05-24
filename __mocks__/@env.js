@@ -6,6 +6,9 @@ module.exports = {
   FIREBASE_STORAGE_BUCKET: 'test.appspot.com',
   FIREBASE_MESSAGING_SENDER_ID: '000000000000',
   FIREBASE_APP_ID: '1:000000000000:web:000000000000',
+  FIREBASE_MEASUREMENT_ID: 'G-TEST000000',
   SPOTIFY_CLIENT_ID: 'test-client-id',
   SPOTIFY_REDIRECT_URI: 'spotifyjamsesh://callback',
+  CLOUDINARY_CLOUD_NAME: 'test-cloud',
+  CLOUDINARY_UPLOAD_PRESET: 'test-preset',
 };

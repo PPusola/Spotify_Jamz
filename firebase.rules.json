@@ -73,11 +73,28 @@
           }
         },
 
+        "sharedProfile": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && (root.child('matches').child($matchId).child('user1').val() === auth.uid || root.child('matches').child($matchId).child('user2').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['sharedAt']) && newData.child('sharedAt').isNumber() && (!newData.hasChild('instagram') || (newData.child('instagram').isString() && newData.child('instagram').val().length <= 50)) && (!newData.hasChild('snapchat') || (newData.child('snapchat').isString() && newData.child('snapchat').val().length <= 50))",
+            "photos": {
+              "$idx": {
+                ".validate": "newData.isString() && newData.val().length <= 500"
+              }
+            }
+          }
+        },
+
         "chat": {
           "$messageId": {
             ".write": "auth != null && !data.exists() && newData.child('uid').val() === auth.uid",
             ".validate": "newData.hasChildren(['uid','displayName','text','sentAt']) && newData.child('displayName').isString() && newData.child('displayName').val().length >= 1 && newData.child('displayName').val().length <= 50 && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 1000 && newData.child('sentAt').isNumber()"
           }
+        },
+
+        "mixtape": {
+          ".write": "auth == null || (auth != null && (root.child('matches').child($matchId).child('user1').val() === auth.uid || root.child('matches').child($matchId).child('user2').val() === auth.uid))",
+          ".validate": "newData.hasChildren(['tracks','generatedAt']) && newData.child('generatedAt').isNumber()"
         }
       }
     },
@@ -93,6 +110,19 @@
           "$trackId": {
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "newData.hasChildren(['trackUri','trackName','artistName','rating','ratedAt']) && newData.child('trackUri').isString() && newData.child('trackName').isString() && newData.child('artistName').isString() && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 10 && newData.child('ratedAt').isNumber()"
+          }
+        }
+      }
+    },
+
+    "userPrivate": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "(!newData.hasChild('instagram') || (newData.child('instagram').isString() && newData.child('instagram').val().length <= 50)) && (!newData.hasChild('snapchat') || (newData.child('snapchat').isString() && newData.child('snapchat').val().length <= 50))",
+        "photos": {
+          "$idx": {
+            ".validate": "newData.isString() && newData.val().length <= 500"
           }
         }
       }

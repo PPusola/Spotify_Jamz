@@ -5,7 +5,7 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useAuth } from "@hooks/useAuth";
 import { profileExists } from "@services/userService";
-import { getMe, getTopArtists, getTopGenres } from "@services/spotify";
+import { getMe, getTopArtists, getTopGenres, getTopTracks } from "@services/spotify";
 import { COLORS } from "@constants";
 
 import LoginScreen from "@screens/LoginScreen";
@@ -19,6 +19,7 @@ import FriendsScreen from "@screens/FriendsScreen";
 import DiscoverScreen from "@screens/DiscoverScreen";
 import MatchesScreen from "@screens/MatchesScreen";
 import MatchChatScreen from "@screens/MatchChatScreen";
+import MixtapeScreen from "@screens/MixtapeScreen";
 import DMListScreen from "@screens/DMListScreen";
 import DMChatScreen from "@screens/DMChatScreen";
 
@@ -37,7 +38,7 @@ const TAB_ICONS = {
   Discover: { active: "🔥", inactive: "🔥" },
   Matches: { active: "💜", inactive: "💜" },
   Friends: { active: "👥", inactive: "👥" },
-  Stats: { active: "📊", inactive: "📊" },
+  Profile: { active: "👤", inactive: "👤" },
 };
 
 function TabIcon({ name, focused }) {
@@ -68,7 +69,7 @@ function MainTabs() {
       <Tab.Screen name="Discover" component={DiscoverScreen} options={{ title: "Discover" }} />
       <Tab.Screen name="Matches" component={MatchesScreen} options={{ title: "Matches" }} />
       <Tab.Screen name="Friends" component={FriendsScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="Stats" component={StatsScreen} options={{ headerShown: false }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
     </Tab.Navigator>
   );
 }
@@ -90,6 +91,12 @@ export default function AppNavigator() {
   useEffect(() => {
     if (!spotifyToken || !user?.uid) return;
 
+    const bailout = setTimeout(() => {
+      console.warn("Profile check bailout — forcing profileReady");
+      setCheckingProfile(false);
+      setProfileReady(true);
+    }, 10000);
+
     const check = async () => {
       setCheckingProfile(true);
       try {
@@ -97,16 +104,18 @@ export default function AppNavigator() {
         setHasProfile(exists);
 
         if (!exists) {
-          const [me, topArtists, topGenres] = await Promise.all([
+          const [me, topArtists, topGenres, topTracks] = await Promise.all([
             getMe(spotifyToken),
             getTopArtists(spotifyToken),
             getTopGenres(spotifyToken),
+            getTopTracks(spotifyToken).catch(() => []),
           ]);
-          setSpotifyProfileData({ me, topArtists, topGenres });
+          setSpotifyProfileData({ me, topArtists, topGenres, topTracks });
         }
       } catch (e) {
         console.warn("Profile check error:", e.message);
       } finally {
+        clearTimeout(bailout);
         setCheckingProfile(false);
         setProfileReady(true);
       }
@@ -133,6 +142,7 @@ export default function AppNavigator() {
               spotifyProfile: spotifyProfileData?.me,
               topArtists: spotifyProfileData?.topArtists,
               topGenres: spotifyProfileData?.topGenres,
+              topTracks: spotifyProfileData?.topTracks,
               onProfileCreated: () => setHasProfile(true),
             }}
           />
@@ -141,7 +151,7 @@ export default function AppNavigator() {
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
             <Stack.Screen name="Room" component={RoomScreen} options={{ title: "Jam Session" }} />
             <Stack.Screen name="Search" component={SearchScreen} options={{ title: "Pick a Song" }} />
-            <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Stats" component={StatsScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="MatchChat"
               component={MatchChatScreen}
@@ -149,6 +159,7 @@ export default function AppNavigator() {
                 title: `${route.params?.otherEmoji ?? "🎵"} ${route.params?.otherNickname ?? "Match"}`,
               })}
             />
+            <Stack.Screen name="Mixtape" component={MixtapeScreen} options={{ title: "Your Mixtape" }} />
             <Stack.Screen name="DMList" component={DMListScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="DMChat"

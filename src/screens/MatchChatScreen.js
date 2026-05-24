@@ -2,13 +2,16 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, Image,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  ScrollView, Linking,
 } from "react-native";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import {
   sendMatchMessage, subscribeToMatchChat,
   revealProfile, subscribeToMatchPfp,
+  shareComfortableProfile, subscribeToSharedProfile,
 } from "@services/matchService";
+import { getPrivateProfile } from "@services/userService";
 import { createRoom } from "@services/roomService";
 import { COLORS } from "@constants";
 
@@ -18,18 +21,36 @@ export default function MatchChatScreen({ route, navigation }) {
   const { profile } = useProfile();
   const [messages, setMessages] = useState([]);
   const [pfpShared, setPfpShared] = useState({});
+  const [sharedProfiles, setSharedProfiles] = useState({});
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [jamming, setJamming] = useState(false);
   const [revealing, setRevealing] = useState(false);
+  const [sharingComfort, setSharingComfort] = useState(false);
 
   const displayName = profile?.nickname ?? user?.uid?.slice(0, 8) ?? "You";
 
   useEffect(() => {
-    const unsubChat = subscribeToMatchChat(matchId, setMessages);
-    const unsubPfp  = subscribeToMatchPfp(matchId, setPfpShared);
-    return () => { unsubChat(); unsubPfp(); };
+    const unsubChat    = subscribeToMatchChat(matchId, setMessages);
+    const unsubPfp     = subscribeToMatchPfp(matchId, setPfpShared);
+    const unsubShared  = subscribeToSharedProfile(matchId, setSharedProfiles);
+    return () => { unsubChat(); unsubPfp(); unsubShared(); };
   }, [matchId]);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Mixtape", { matchId, otherNickname, otherUid })}
+          style={styles.headerMixtapeBtn}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.headerMixtapeIcon}>🎵</Text>
+          <Text style={styles.headerMixtapeText}>YOUR MIXTAPE</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, matchId, otherNickname, otherUid]);
 
   // ── Pfp reveal state ──────────────────────────────────────────────────────
   const myAvatar    = pfpShared[user?.uid];
@@ -49,6 +70,59 @@ export default function MatchChatScreen({ route, navigation }) {
     } finally {
       setRevealing(false);
     }
+  };
+
+  // ── Comfortable share (photos + socials) ──────────────────────────────────
+  const myShared    = sharedProfiles[user?.uid];
+  const theirShared = otherUid ? sharedProfiles[otherUid] : null;
+  const iShared     = !!myShared;
+  const theyShared  = !!theirShared;
+  const bothShared  = iShared && theyShared;
+
+  const handleComfortableShare = () => {
+    if (sharingComfort || iShared) return;
+    Alert.alert(
+      "Share photos & socials?",
+      `Your photos and social handles will become visible to ${otherNickname} once they also share theirs.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Share",
+          onPress: async () => {
+            setSharingComfort(true);
+            try {
+              const priv = await getPrivateProfile(user.uid);
+              if (
+                (!priv.photos || priv.photos.length === 0) &&
+                !priv.instagram && !priv.snapchat
+              ) {
+                Alert.alert(
+                  "Nothing to share",
+                  "Add photos or a social handle in your profile first."
+                );
+                return;
+              }
+              await shareComfortableProfile(matchId, user.uid, priv);
+            } catch (e) {
+              Alert.alert("Error", e.message);
+            } finally {
+              setSharingComfort(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const openSocial = (kind, handle) => {
+    const clean = String(handle).replace(/^@/, "");
+    const url =
+      kind === "instagram"
+        ? `https://instagram.com/${clean}`
+        : `https://snapchat.com/add/${clean}`;
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Couldn't open link", url)
+    );
   };
 
   // ── Messaging ─────────────────────────────────────────────────────────────
@@ -154,6 +228,87 @@ export default function MatchChatScreen({ route, navigation }) {
     );
   };
 
+  // ── Comfortable share banner (photos + socials) ───────────────────────────
+  const renderComfortBanner = () => {
+    if (bothShared) {
+      return (
+        <View style={styles.comfortPanel}>
+          <Text style={styles.comfortHeader}>
+            ✨ You both shared — here's {otherNickname}
+          </Text>
+
+          {theirShared.photos?.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.photoScroll}
+              contentContainerStyle={{ gap: 8 }}
+            >
+              {theirShared.photos.map((url) => (
+                <Image key={url} source={{ uri: url }} style={styles.comfortPhoto} />
+              ))}
+            </ScrollView>
+          )}
+
+          <View style={styles.socialButtonsRow}>
+            {theirShared.instagram ? (
+              <TouchableOpacity
+                style={[styles.socialBtn, styles.igBtn]}
+                onPress={() => openSocial("instagram", theirShared.instagram)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.socialBtnText}>📸 @{theirShared.instagram.replace(/^@/, "")}</Text>
+              </TouchableOpacity>
+            ) : null}
+            {theirShared.snapchat ? (
+              <TouchableOpacity
+                style={[styles.socialBtn, styles.snapBtn]}
+                onPress={() => openSocial("snapchat", theirShared.snapchat)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.socialBtnText}>👻 {theirShared.snapchat.replace(/^@/, "")}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      );
+    }
+
+    if (iShared) {
+      return (
+        <View style={styles.comfortBanner}>
+          <Text style={styles.comfortWait}>
+            ✓ Shared with {otherNickname} — waiting for them to share back...
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.comfortBanner}
+        onPress={handleComfortableShare}
+        disabled={sharingComfort}
+        activeOpacity={0.85}
+      >
+        {sharingComfort ? (
+          <ActivityIndicator color={COLORS.primary} size="small" />
+        ) : (
+          <>
+            <Text style={styles.comfortIcon}>🤝</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.comfortTitle}>Comfortable to share?</Text>
+              <Text style={styles.comfortSub}>
+                Tap to send your photos + socials — they only become visible
+                once {otherNickname} shares back.
+              </Text>
+            </View>
+          </>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -170,6 +325,9 @@ export default function MatchChatScreen({ route, navigation }) {
 
       {/* Profile reveal */}
       {renderRevealBanner()}
+
+      {/* Comfortable share — photos + socials */}
+      {bothRevealed && renderComfortBanner()}
 
       <FlatList
         data={[...messages].reverse()}
@@ -223,6 +381,16 @@ function formatTime(ms) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
 
+  headerMixtapeBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingVertical: 6, paddingHorizontal: 10, marginRight: 12,
+    backgroundColor: COLORS.primary + "22",
+    borderWidth: 1, borderColor: COLORS.primary + "55",
+    borderRadius: 14,
+  },
+  headerMixtapeIcon: { fontSize: 12 },
+  headerMixtapeText: { color: COLORS.primary, fontSize: 11, fontWeight: "900", letterSpacing: 0.5 },
+
   jamBanner: { backgroundColor: COLORS.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, gap: 8 },
   jamBannerIcon: { fontSize: 18 },
   jamBannerText: { color: COLORS.background, fontWeight: "bold", fontSize: 15 },
@@ -237,6 +405,41 @@ const styles = StyleSheet.create({
   revealSub: { color: COLORS.textSecondary, fontSize: 11 },
   revealWait: { color: COLORS.textSecondary, fontSize: 13, fontStyle: "italic" },
   revealHeart: { fontSize: 24 },
+
+  comfortBanner: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: COLORS.surface,
+    paddingVertical: 12, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: COLORS.surfaceAlt,
+  },
+  comfortIcon: { fontSize: 22 },
+  comfortTitle: { color: COLORS.textPrimary, fontWeight: "bold", fontSize: 13 },
+  comfortSub: { color: COLORS.textSecondary, fontSize: 11, lineHeight: 15 },
+  comfortWait: { color: COLORS.textSecondary, fontSize: 13, fontStyle: "italic", textAlign: "center", flex: 1 },
+
+  comfortPanel: {
+    backgroundColor: COLORS.surface,
+    padding: 14,
+    borderBottomWidth: 1, borderBottomColor: COLORS.surfaceAlt,
+  },
+  comfortHeader: {
+    color: COLORS.textPrimary,
+    fontWeight: "bold", fontSize: 13,
+    marginBottom: 10,
+  },
+  photoScroll: { marginBottom: 12 },
+  comfortPhoto: {
+    width: 96, height: 96, borderRadius: 14,
+    backgroundColor: COLORS.surfaceAlt,
+  },
+  socialButtonsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  socialBtn: {
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 50,
+  },
+  igBtn:   { backgroundColor: "#E1306C22", borderWidth: 1, borderColor: "#E1306C66" },
+  snapBtn: { backgroundColor: "#FFFC0022", borderWidth: 1, borderColor: "#FFFC0066" },
+  socialBtnText: { color: COLORS.textPrimary, fontWeight: "700", fontSize: 13 },
 
   avatarWrap: { alignItems: "center", gap: 4 },
   avatarImg: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, borderColor: COLORS.primary },

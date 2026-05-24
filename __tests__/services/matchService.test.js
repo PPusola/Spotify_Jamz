@@ -179,7 +179,7 @@ describe('sendMatchMessage', () => {
   it('pushes message to match chat with correct fields', async () => {
     await sendMatchMessage('match-123', 'uid-a', 'Alice', 'Hello!');
     expect(push).toHaveBeenCalledWith('mock-ref');
-    expect(set).toHaveBeenCalledWith('mock-push-key', expect.objectContaining({
+    expect(set).toHaveBeenCalledWith({ key: 'mock-push-key' }, expect.objectContaining({
       uid: 'uid-a',
       displayName: 'Alice',
       text: 'Hello!',
@@ -188,7 +188,7 @@ describe('sendMatchMessage', () => {
 
   it('merges extra fields into the message', async () => {
     await sendMatchMessage('match-123', 'uid-a', 'Alice', 'Hi', { type: 'reveal' });
-    expect(set).toHaveBeenCalledWith('mock-push-key', expect.objectContaining({ type: 'reveal' }));
+    expect(set).toHaveBeenCalledWith({ key: 'mock-push-key' }, expect.objectContaining({ type: 'reveal' }));
   });
 });
 

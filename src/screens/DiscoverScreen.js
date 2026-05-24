@@ -8,7 +8,9 @@ import { PanGestureHandler, State } from "react-native-gesture-handler";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { getPublicUsers, getAlreadySeen, likeUser, passUser } from "@services/matchService";
-import { tasteSimilarity, getVibe, matchLabel, matchColor } from "@utils/similarity";
+import { generateAndSaveMixtape } from "@services/mixtapeService";
+import { getVibe, matchLabel, matchColor } from "@utils/similarity";
+import { mlScoreCandidates } from "@utils/mlCompatibility";
 import { COLORS } from "@constants";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
@@ -30,7 +32,7 @@ function GradientBar({ progress, height = 5, style }) {
 }
 
 export default function DiscoverScreen({ navigation }) {
-  const { user } = useAuth();
+  const { user, spotifyToken } = useAuth();
   const { profile } = useProfile();
 
   const [cards, setCards] = useState([]);
@@ -74,9 +76,9 @@ export default function DiscoverScreen({ navigation }) {
         getAlreadySeen(user.uid),
       ]);
       const unseen = users.filter(u => !seen.has(u.uid));
-      const scored = unseen
-        .map(u => ({ ...u, score: tasteSimilarity(profile, u) }))
-        .sort((a, b) => b.score - a.score);
+      // ML-based compatibility: vectorize all users, K-Means cluster them,
+      // then rank by cosine similarity + same-cluster boost.
+      const scored = mlScoreCandidates(profile, unseen);
       setCards(scored);
       setIndex(0);
     } finally {
@@ -94,6 +96,10 @@ export default function DiscoverScreen({ navigation }) {
     try {
       const mid = await likeUser(user.uid, card.uid, card.score);
       if (mid) {
+        // Fire-and-forget mixtape generation. MixtapeScreen polls until it shows up.
+        generateAndSaveMixtape(mid, user.uid, card.uid, spotifyToken).catch(
+          (e) => console.warn("Mixtape generation failed:", e?.message)
+        );
         setMatchModal({ mid, other: card });
       } else {
         setIndex(i => i + 1);
@@ -101,7 +107,7 @@ export default function DiscoverScreen({ navigation }) {
     } finally {
       setActing(false);
     }
-  }, [user.uid]);
+  }, [user.uid, spotifyToken]);
 
   const doPass = useCallback(async (card) => {
     setActing(true);

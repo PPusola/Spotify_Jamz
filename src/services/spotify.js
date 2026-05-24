@@ -26,6 +26,9 @@ const AUTH_CONFIG = {
   // Fixed state prevents "state mismatch" in Expo Go when the app remounts
   // on redirect. PKCE (code_verifier) is the actual security mechanism here.
   state: "jamz_auth_state",
+  // Force the Spotify login + consent screen every time so a switched user
+  // can't be silently re-authed via cached browser cookies.
+  extraParams: { show_dialog: "true" },
 };
 
 export function useSpotifyAuth() {
@@ -90,6 +93,46 @@ export async function getTopGenres(accessToken, limit = 10) {
   const genres = data?.items?.flatMap((a) => a.genres) ?? [];
   // Deduplicate and take top 10
   return [...new Set(genres)].slice(0, 10);
+}
+
+/**
+ * Get the user's top tracks for mixtape generation.
+ * Returns lightweight track objects (id, uri, name, artist, album image).
+ */
+export async function getTopTracks(accessToken, limit = 50) {
+  const data = await spotifyFetch(
+    `/me/top/tracks?limit=${limit}&time_range=medium_term`,
+    accessToken
+  );
+  return (data?.items ?? []).map((t) => ({
+    id: t.id,
+    uri: t.uri,
+    name: t.name,
+    artistName: t.artists?.[0]?.name ?? "",
+    artistIds: (t.artists ?? []).map((a) => a.id).filter(Boolean),
+    albumImage: t.album?.images?.[t.album.images.length - 1]?.url ?? null,
+  }));
+}
+
+/**
+ * Search tracks for a given genre (used by mixtape Tier 4).
+ * Returns the same shape as getTopTracks.
+ */
+export async function searchTracksByGenre(genre, accessToken, limit = 10) {
+  const params = new URLSearchParams({
+    q: `genre:"${genre}"`,
+    type: "track",
+    limit: String(limit),
+  });
+  const data = await spotifyFetch(`/search?${params}`, accessToken);
+  return (data?.tracks?.items ?? []).map((t) => ({
+    id: t.id,
+    uri: t.uri,
+    name: t.name,
+    artistName: t.artists?.[0]?.name ?? "",
+    artistIds: (t.artists ?? []).map((a) => a.id).filter(Boolean),
+    albumImage: t.album?.images?.[t.album.images.length - 1]?.url ?? null,
+  }));
 }
 
 // ─── Playback APIs ────────────────────────────────────────────────────────────

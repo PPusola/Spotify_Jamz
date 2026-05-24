@@ -39,7 +39,15 @@ export default function StatsScreen({ navigation }) {
       <View style={styles.container}>
 
         <View style={styles.topBar}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.backBtnText}>←</Text>
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Your Stats</Text>
+          <View style={styles.backBtn} />
         </View>
 
         {/* Time range tabs */}
@@ -171,8 +179,21 @@ function TrackRow({ track, rank, colorPair }) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: COLORS.background },
   container: { flex: 1, paddingHorizontal: 20 },
-  topBar: { marginBottom: 20, marginTop: 8 },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    marginTop: 8,
+  },
   headerTitle: { fontSize: 22, fontWeight: "bold", color: COLORS.textPrimary },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    justifyContent: "center", alignItems: "center",
+    borderWidth: 1, borderColor: COLORS.surfaceAlt,
+  },
+  backBtnText: { color: COLORS.textPrimary, fontSize: 18, fontWeight: "bold" },
 
   tabContainer: {
     flexDirection: "row", backgroundColor: COLORS.surface,

@@ -82,6 +82,39 @@ export function subscribeToMatchPfp(mid, onUpdate) {
   return () => off(pfpRef);
 }
 
+/**
+ * Share a "comfortable" profile snapshot with a matched user.
+ * Writes the user's photos + social handles into matches/$mid/sharedProfile/$uid.
+ * The other side of the match only becomes visible to a given user once both
+ * sides have shared (UI gates on that).
+ */
+export async function shareComfortableProfile(mid, uid, { photos, instagram, snapchat }) {
+  const payload = {
+    sharedAt: Date.now(),
+  };
+  const cleanPhotos = (photos || []).filter(
+    (u) => typeof u === "string" && u.length > 0 && u.length <= 500
+  );
+  if (cleanPhotos.length > 0) payload.photos = cleanPhotos;
+  if (instagram) payload.instagram = String(instagram).slice(0, 50);
+  if (snapchat)  payload.snapchat  = String(snapchat).slice(0, 50);
+
+  await set(ref(db, `${MATCHES}/${mid}/sharedProfile/${uid}`), payload);
+}
+
+/**
+ * Unshare — clears your shared profile from this match.
+ */
+export async function unshareComfortableProfile(mid, uid) {
+  await set(ref(db, `${MATCHES}/${mid}/sharedProfile/${uid}`), null);
+}
+
+export function subscribeToSharedProfile(mid, onUpdate) {
+  const r = ref(db, `${MATCHES}/${mid}/sharedProfile`);
+  onValue(r, (snap) => onUpdate(snap.val() ?? {}));
+  return () => off(r);
+}
+
 export function subscribeToMatchChat(mid, onUpdate) {
   const chatRef = ref(db, `${MATCHES}/${mid}/chat`);
   onValue(chatRef, (snap) => {
