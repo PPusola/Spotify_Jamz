@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { ref, set, get, push, onValue, off, update } from "firebase/database";
+import { ref, set, get, push, onValue, off, update, remove } from "firebase/database";
 
 const LIKES = "likes";
 const PASSED = "passed";
@@ -76,6 +76,15 @@ export async function revealProfile(mid, uid, avatarUrl) {
   await set(ref(db, `${MATCHES}/${mid}/pfpShared/${uid}`), avatarUrl || "none");
 }
 
+/**
+ * Reverse of revealProfile — removes the user's photo from the match.
+ * .validate rules don't apply to deletions in Firebase, so this is safe
+ * even though pfpShared/$uid's validator requires a string.
+ */
+export async function unrevealProfile(mid, uid) {
+  await remove(ref(db, `${MATCHES}/${mid}/pfpShared/${uid}`));
+}
+
 export function subscribeToMatchPfp(mid, onUpdate) {
   const pfpRef = ref(db, `${MATCHES}/${mid}/pfpShared`);
   onValue(pfpRef, (snap) => onUpdate(snap.val() ?? {}));
@@ -126,4 +135,35 @@ export function subscribeToMatchChat(mid, onUpdate) {
     onUpdate(msgs);
   });
   return () => off(chatRef);
+}
+
+// ─── Typing indicator ────────────────────────────────────────────────────────
+
+export function setMatchTyping(mid, uid, isTyping) {
+  return set(ref(db, `${MATCHES}/${mid}/typing/${uid}`), !!isTyping);
+}
+
+export function subscribeToMatchTyping(mid, otherUid, onUpdate) {
+  const r = ref(db, `${MATCHES}/${mid}/typing/${otherUid}`);
+  onValue(r, (snap) => onUpdate(snap.val() === true));
+  return () => off(r);
+}
+
+// ─── Read receipts ───────────────────────────────────────────────────────────
+
+export function setMatchLastRead(mid, uid, ts = Date.now()) {
+  return set(ref(db, `${MATCHES}/${mid}/lastRead/${uid}`), ts);
+}
+
+export function subscribeToMatchLastRead(mid, otherUid, onUpdate) {
+  const r = ref(db, `${MATCHES}/${mid}/lastRead/${otherUid}`);
+  onValue(r, (snap) => onUpdate(snap.val() ?? 0));
+  return () => off(r);
+}
+
+// ─── Reactions ───────────────────────────────────────────────────────────────
+
+export function setMatchReaction(mid, msgId, uid, emoji) {
+  const r = ref(db, `${MATCHES}/${mid}/chat/${msgId}/reactions/${uid}`);
+  return emoji ? set(r, emoji) : remove(r);
 }

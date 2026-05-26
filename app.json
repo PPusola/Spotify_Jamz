@@ -23,12 +23,31 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1DB954"
       },
-      "package": "com.yourname.spotifyjamsesh"
+      "package": "com.yourname.spotifyjamsesh",
+      "googleServicesFile": "./google-services.json"
     },
     "scheme": "spotifyjamsesh",
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#1DB954",
+      "androidMode": "default"
+    },
     "plugins": [
       "expo-web-browser",
-      "expo-asset"
-    ]
+      "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1DB954"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "eb3e8a7b-356c-47e0-8b59-7a072074b845"
+      }
+    },
+    "owner": "sidpusola"
   }
 }

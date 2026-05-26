@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { ActivityIndicator, View, Text, StyleSheet } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
 import { useTheme } from "@hooks/useTheme";
+import { useNotifications } from "@hooks/useNotifications";
 import { profileExists } from "@services/userService";
 import { getMe, getTopArtists, getTopGenres, getTopTracks } from "@services/spotify";
 
@@ -94,8 +95,12 @@ const Loader = () => {
   );
 };
 
+const navigationRef = createNavigationContainerRef();
+
 export default function AppNavigator() {
   const COLORS = useTheme();
+  const navRef = useRef(navigationRef);
+  useNotifications(navRef);
   const stackOptions = useMemo(() => ({
     headerStyle: { backgroundColor: COLORS.surface, shadowColor: "transparent", elevation: 0, borderBottomWidth: 0 },
     headerTintColor: COLORS.textPrimary,
@@ -149,7 +154,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={stackOptions}>
         {!spotifyToken ? (
           <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />

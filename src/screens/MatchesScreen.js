@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, RefreshControl,
 } from "react-native";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
@@ -11,6 +11,7 @@ import { useTheme } from "@hooks/useTheme";
 import { matchLabel, matchColor } from "@utils/similarity";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
+import { MatchRowSkeleton } from "@components/Skeleton";
 
 export default function MatchesScreen({ navigation }) {
   const COLORS = useTheme();
@@ -19,11 +20,11 @@ export default function MatchesScreen({ navigation }) {
   const { profile } = useProfile();
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [joiningId, setJoiningId] = useState(null);
 
   const loadMatches = useCallback(async () => {
     if (!user?.uid) return;
-    setLoading(true);
     try {
       const raw = await getMatches(user.uid);
       const withProfiles = await Promise.all(
@@ -39,6 +40,11 @@ export default function MatchesScreen({ navigation }) {
   }, [user?.uid]);
 
   useEffect(() => { loadMatches(); }, [loadMatches]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadMatches(); } finally { setRefreshing(false); }
+  }, [loadMatches]);
 
   const handleJam = async (match) => {
     if (joiningId) return;
@@ -56,18 +62,13 @@ export default function MatchesScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={COLORS.primary} size="large" />
-      </View>
-    );
-  }
-
-  if (matches.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyEmoji}>💜</Text>
-        <Text style={styles.emptyTitle}>No matches yet</Text>
-        <Text style={styles.emptySub}>Head to Discover to find your music soulmate.</Text>
+      <View style={styles.container}>
+        <View style={styles.list}>
+          <MatchRowSkeleton />
+          <MatchRowSkeleton />
+          <MatchRowSkeleton />
+          <MatchRowSkeleton />
+        </View>
       </View>
     );
   }
@@ -123,10 +124,23 @@ export default function MatchesScreen({ navigation }) {
         data={matches}
         keyExtractor={m => m.id}
         renderItem={renderMatch}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={matches.length === 0 ? styles.listEmpty : styles.list}
         showsVerticalScrollIndicator={false}
-        onRefresh={loadMatches}
-        refreshing={loading}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyInList}>
+            <Text style={styles.emptyEmoji}>💜</Text>
+            <Text style={styles.emptyTitle}>No matches yet</Text>
+            <Text style={styles.emptySub}>Head to Discover to find your music soulmate.</Text>
+          </View>
+        }
       />
     </View>
   );
@@ -140,6 +154,8 @@ const makeStyles = (COLORS) => StyleSheet.create({
   emptySub: { color: COLORS.textSecondary, fontSize: 14, textAlign: "center" },
 
   list: { padding: 16, gap: 12 },
+  listEmpty: { flexGrow: 1 },
+  emptyInList: { flex: 1, justifyContent: "center", alignItems: "center", padding: 32 },
   card: {
     backgroundColor: COLORS.surface,
     borderRadius: 20,

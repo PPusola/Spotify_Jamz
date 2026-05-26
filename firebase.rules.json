@@ -88,7 +88,28 @@
         "chat": {
           "$messageId": {
             ".write": "auth != null && !data.exists() && newData.child('uid').val() === auth.uid",
-            ".validate": "newData.hasChildren(['uid','displayName','text','sentAt']) && newData.child('displayName').isString() && newData.child('displayName').val().length >= 1 && newData.child('displayName').val().length <= 50 && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 1000 && newData.child('sentAt').isNumber()"
+            ".validate": "newData.hasChildren(['uid','displayName','text','sentAt']) && newData.child('displayName').isString() && newData.child('displayName').val().length >= 1 && newData.child('displayName').val().length <= 50 && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 1000 && newData.child('sentAt').isNumber()",
+
+            "reactions": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && (root.child('matches').child($matchId).child('user1').val() === auth.uid || root.child('matches').child($matchId).child('user2').val() === auth.uid)",
+                ".validate": "!newData.exists() || (newData.isString() && newData.val().length >= 1 && newData.val().length <= 8)"
+              }
+            }
+          }
+        },
+
+        "typing": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && (root.child('matches').child($matchId).child('user1').val() === auth.uid || root.child('matches').child($matchId).child('user2').val() === auth.uid)",
+            ".validate": "newData.isBoolean()"
+          }
+        },
+
+        "lastRead": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && (root.child('matches').child($matchId).child('user1').val() === auth.uid || root.child('matches').child($matchId).child('user2').val() === auth.uid)",
+            ".validate": "newData.isNumber()"
           }
         },
 
@@ -111,6 +132,16 @@
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "newData.hasChildren(['trackUri','trackName','artistName','rating','ratedAt']) && newData.child('trackUri').isString() && newData.child('trackName').isString() && newData.child('artistName').isString() && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 10 && newData.child('ratedAt').isNumber()"
           }
+        }
+      }
+    },
+
+    "pushTokens": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$tokenKey": {
+          ".validate": "newData.hasChildren(['token','updatedAt']) && newData.child('token').isString() && newData.child('token').val().length <= 200 && newData.child('updatedAt').isNumber()"
         }
       }
     },
@@ -160,7 +191,28 @@
         "messages": {
           "$msgId": {
             ".write": "auth != null && !data.exists() && newData.child('uid').val() === auth.uid && root.child('dms').child($dmId).child('info/participants').hasChild(auth.uid)",
-            ".validate": "newData.hasChildren(['uid','displayName','text','sentAt']) && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 2000 && newData.child('sentAt').isNumber()"
+            ".validate": "newData.hasChildren(['uid','displayName','text','sentAt']) && newData.child('text').isString() && newData.child('text').val().length >= 1 && newData.child('text').val().length <= 2000 && newData.child('sentAt').isNumber()",
+
+            "reactions": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid && root.child('dms').child($dmId).child('info/participants').hasChild(auth.uid)",
+                ".validate": "!newData.exists() || (newData.isString() && newData.val().length >= 1 && newData.val().length <= 8)"
+              }
+            }
+          }
+        },
+
+        "typing": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('dms').child($dmId).child('info/participants').hasChild(auth.uid)",
+            ".validate": "newData.isBoolean()"
+          }
+        },
+
+        "lastRead": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('dms').child($dmId).child('info/participants').hasChild(auth.uid)",
+            ".validate": "newData.isNumber()"
           }
         }
       }

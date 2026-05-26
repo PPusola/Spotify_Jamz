@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, ActivityIndicator, Alert,
+  TextInput, ActivityIndicator, Alert, RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -13,16 +13,18 @@ import {
   subscribeToPendingRequests, checkRelationship,
 } from "@services/friendRequestService";
 import { getOrCreateDM } from "@services/dmService";
+import { sendPush } from "@services/pushService";
 import { useTheme } from "@hooks/useTheme";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
+import { UserRowSkeleton } from "@components/Skeleton";
 
 const TABS = ["Find", "Requests", "Friends"];
 
 export default function FriendsScreen({ navigation }) {
   const COLORS = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { user } = useAuth();
+  const { user, spotifyToken } = useAuth();
   const { profile } = useProfile();
   const [activeTab, setActiveTab] = useState("Find");
   const [searchQuery, setSearchQuery] = useState("");
@@ -31,6 +33,7 @@ export default function FriendsScreen({ navigation }) {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [friends, setFriends] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [acting, setActing] = useState(null);
 
   useEffect(() => {
@@ -79,6 +82,13 @@ export default function FriendsScreen({ navigation }) {
     try {
       await sendFriendRequest(user.uid, profile, target.uid);
       setRelationMap(r => ({ ...r, [target.uid]: "pending_sent" }));
+      sendPush({
+        spotifyAccessToken: spotifyToken,
+        recipientUid: target.uid,
+        title: "👥 New friend request",
+        body: `${profile?.nickname ?? "Someone"} wants to be your friend`,
+        data: { kind: "friend_request" },
+      });
     } catch { Alert.alert("Error", "Could not send request."); }
     finally { setActing(null); }
   };
@@ -131,6 +141,21 @@ export default function FriendsScreen({ navigation }) {
     });
   };
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (activeTab === "Friends") {
+        const list = await getFriends(user.uid);
+        setFriends(list);
+      } else if (activeTab === "Find" && searchQuery.trim()) {
+        await handleSearch();
+      }
+      // Requests tab is real-time via subscription; the pull just gives feedback.
+    } finally {
+      setRefreshing(false);
+    }
+  }, [activeTab, searchQuery, user?.uid]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -174,7 +199,18 @@ export default function FriendsScreen({ navigation }) {
           ))}
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={COLORS.primary}
+              colors={[COLORS.primary]}
+            />
+          }
+        >
 
           {/* FIND */}
           {activeTab === "Find" && (
@@ -204,7 +240,13 @@ export default function FriendsScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              {loading && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 20 }} />}
+              {loading && (
+                <View style={styles.skeletonList}>
+                  <UserRowSkeleton />
+                  <UserRowSkeleton />
+                  <UserRowSkeleton />
+                </View>
+              )}
 
               {!loading && searchResults.map(u => {
                 const rel = relationMap[u.uid] ?? "none";
@@ -274,7 +316,14 @@ export default function FriendsScreen({ navigation }) {
           {/* FRIENDS */}
           {activeTab === "Friends" && (
             <View style={styles.section}>
-              {loading && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 20 }} />}
+              {loading && (
+                <View style={styles.skeletonList}>
+                  <UserRowSkeleton />
+                  <UserRowSkeleton />
+                  <UserRowSkeleton />
+                  <UserRowSkeleton />
+                </View>
+              )}
               {!loading && friends.length === 0 && (
                 <Text style={styles.emptyText}>No friends yet — find people in the Find tab.</Text>
               )}
@@ -328,6 +377,7 @@ const makeStyles = (COLORS) => StyleSheet.create({
 
   scroll: { paddingBottom: 40 },
   section: { gap: 10 },
+  skeletonList: { gap: 10, marginTop: 4 },
 
   searchRow: { flexDirection: "row", gap: 10, marginBottom: 4 },
   searchInputWrap: {

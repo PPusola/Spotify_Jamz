@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { ref, set, get, push, onValue, off } from "firebase/database";
+import { ref, set, get, push, onValue, off, remove } from "firebase/database";
 
 const DMS = "dms";
 const USER_DMS = "userDMs";
@@ -67,4 +67,35 @@ export function subscribeToDMList(uid, onUpdate) {
 
 export async function markDMRead(dmId, uid) {
   await set(ref(db, `${USER_DMS}/${uid}/${dmId}/unread`), false);
+}
+
+// ─── Typing indicator ────────────────────────────────────────────────────────
+
+export function setDMTyping(dmId, uid, isTyping) {
+  return set(ref(db, `${DMS}/${dmId}/typing/${uid}`), !!isTyping);
+}
+
+export function subscribeToDMTyping(dmId, otherUid, onUpdate) {
+  const r = ref(db, `${DMS}/${dmId}/typing/${otherUid}`);
+  onValue(r, (snap) => onUpdate(snap.val() === true));
+  return () => off(r);
+}
+
+// ─── Read receipts ───────────────────────────────────────────────────────────
+
+export function setDMLastRead(dmId, uid, ts = Date.now()) {
+  return set(ref(db, `${DMS}/${dmId}/lastRead/${uid}`), ts);
+}
+
+export function subscribeToDMLastRead(dmId, otherUid, onUpdate) {
+  const r = ref(db, `${DMS}/${dmId}/lastRead/${otherUid}`);
+  onValue(r, (snap) => onUpdate(snap.val() ?? 0));
+  return () => off(r);
+}
+
+// ─── Reactions ───────────────────────────────────────────────────────────────
+
+export function setDMReaction(dmId, msgId, uid, emoji) {
+  const r = ref(db, `${DMS}/${dmId}/messages/${msgId}/reactions/${uid}`);
+  return emoji ? set(r, emoji) : remove(r);
 }

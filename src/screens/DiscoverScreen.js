@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
-  Modal, Animated, Dimensions,
+  Modal, Animated, Dimensions, ScrollView, RefreshControl,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { PanGestureHandler, State } from "react-native-gesture-handler";
@@ -9,11 +9,13 @@ import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { getPublicUsers, getAlreadySeen, likeUser, passUser } from "@services/matchService";
 import { generateAndSaveMixtape } from "@services/mixtapeService";
+import { sendPush } from "@services/pushService";
 import { getVibe, matchLabel, matchColor } from "@utils/similarity";
 import { mlScoreCandidates } from "@utils/mlCompatibility";
 import { useTheme } from "@hooks/useTheme";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
+import { DiscoverCardSkeleton } from "@components/Skeleton";
 
 const { width: SW } = Dimensions.get("window");
 const SWIPE_THRESHOLD = SW * 0.28;
@@ -41,6 +43,7 @@ export default function DiscoverScreen({ navigation }) {
   const [cards, setCards] = useState([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [acting, setActing] = useState(false);
   const [matchModal, setMatchModal] = useState(null);
 
@@ -91,6 +94,11 @@ export default function DiscoverScreen({ navigation }) {
 
   useEffect(() => { loadCards(); }, [loadCards]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadCards(); } finally { setRefreshing(false); }
+  }, [loadCards]);
+
   const current = cards[index];
   const next = cards[index + 1];
 
@@ -103,6 +111,20 @@ export default function DiscoverScreen({ navigation }) {
         generateAndSaveMixtape(mid, user.uid, card.uid, spotifyToken).catch(
           (e) => console.warn("Mixtape generation failed:", e?.message)
         );
+        // Push the other user — they just got a new match
+        sendPush({
+          spotifyAccessToken: spotifyToken,
+          recipientUid: card.uid,
+          title: "💜 It's a Match!",
+          body: `You and ${profile?.nickname ?? "someone"} are musically in sync`,
+          data: {
+            kind: "match_new",
+            matchId: mid,
+            otherUid: user.uid,
+            otherNickname: profile?.nickname ?? "Match",
+            otherEmoji: profile?.emoji ?? "🎵",
+          },
+        });
         setMatchModal({ mid, other: card });
       } else {
         setIndex(i => i + 1);
@@ -110,7 +132,7 @@ export default function DiscoverScreen({ navigation }) {
     } finally {
       setActing(false);
     }
-  }, [user.uid, spotifyToken]);
+  }, [user.uid, spotifyToken, profile?.nickname, profile?.emoji]);
 
   const doPass = useCallback(async (card) => {
     setActing(true);
@@ -181,20 +203,43 @@ export default function DiscoverScreen({ navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={COLORS.primary} size="large" />
+      <View style={styles.container}>
+        <View style={styles.stack}>
+          <View style={[styles.card, styles.cardBehind]}>
+            <DiscoverCardSkeleton />
+          </View>
+          <View style={styles.card}>
+            <DiscoverCardSkeleton />
+          </View>
+        </View>
+        <View style={styles.actions}>
+          <View style={[styles.passBtn, { opacity: 0.4 }]} />
+          <View style={styles.counterWrap} />
+          <View style={[styles.likeBtnGradient, { backgroundColor: COLORS.surfaceHigh, opacity: 0.4 }]} />
+        </View>
       </View>
     );
   }
 
   if (!current) {
     return (
-      <View style={styles.centered}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: COLORS.background }}
+        contentContainerStyle={styles.centeredScroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
+      >
         <Text style={styles.emptyEmoji}>🎵</Text>
         <Text style={styles.emptyTitle}>You're all caught up</Text>
         <Text style={styles.emptySub}>No more profiles right now.</Text>
         <GradientButton onPress={loadCards} label="Refresh" style={styles.refreshBtnWrap} gradientStyle={styles.refreshGradient} />
-      </View>
+      </ScrollView>
     );
   }
 
@@ -367,6 +412,7 @@ function CardContent({ card, vibe, score }) {
 const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16 },
   centered: { flex: 1, backgroundColor: COLORS.background, justifyContent: "center", alignItems: "center", padding: 32 },
+  centeredScroll: { flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 32 },
 
   stack: { flex: 1, position: "relative" },
   card: {

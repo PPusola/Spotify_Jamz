@@ -37,20 +37,29 @@ async function fetchRefreshedToken(refreshToken) {
 }
 
 async function exchangeForFirebaseToken(spotifyAccessToken) {
+  console.log("[auth] CUSTOM_TOKEN_URL =", JSON.stringify(CUSTOM_TOKEN_URL));
   if (!CUSTOM_TOKEN_URL) {
     throw new Error(
       "CUSTOM_TOKEN_URL is not set in .env — deploy the worker (see worker/README.md) and set the URL."
     );
   }
-  const res = await withTimeout(
-    fetch(CUSTOM_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ spotifyAccessToken }),
-    }),
-    10000,
-    "Firebase custom-token exchange"
-  );
+  console.log("[auth] POSTing to worker...");
+  let res;
+  try {
+    res = await withTimeout(
+      fetch(CUSTOM_TOKEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spotifyAccessToken }),
+      }),
+      10000,
+      "Firebase custom-token exchange"
+    );
+  } catch (e) {
+    console.warn("[auth] worker fetch threw:", e?.message);
+    throw e;
+  }
+  console.log("[auth] worker responded with status", res.status);
   const json = await res.json().catch(() => ({}));
   if (!res.ok || !json?.firebaseToken) {
     throw new Error(json?.error || `Token exchange failed (${res.status})`);

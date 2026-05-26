@@ -1,12 +1,14 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { subscribeToDMList, getOrCreateDM } from "@services/dmService";
 import { useTheme } from "@hooks/useTheme";
+import { DMRowSkeleton } from "@components/Skeleton";
 
 export default function DMListScreen({ navigation }) {
   const COLORS = useTheme();
@@ -15,6 +17,7 @@ export default function DMListScreen({ navigation }) {
   const { profile } = useProfile();
   const [convos, setConvos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -24,6 +27,14 @@ export default function DMListScreen({ navigation }) {
     });
     return unsub;
   }, [user?.uid]);
+
+  // The DM list is driven by a realtime subscription, so a pull-to-refresh
+  // is a no-op data-wise — we just show the spinner briefly so the gesture
+  // feels acknowledged.
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
+  }, []);
 
   const renderItem = ({ item }) => {
     const isUnread = item.unread;
@@ -59,22 +70,37 @@ export default function DMListScreen({ navigation }) {
         <Text style={styles.title}>Messages</Text>
 
         {loading
-          ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
-          : convos.length === 0
-            ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyEmoji}>💬</Text>
-                <Text style={styles.emptyTitle}>No messages yet</Text>
-                <Text style={styles.emptySub}>Go to Friends → message a friend to start chatting.</Text>
+          ? (
+              <View style={styles.skeletonList}>
+                <DMRowSkeleton />
+                <DMRowSkeleton />
+                <DMRowSkeleton />
+                <DMRowSkeleton />
+                <DMRowSkeleton />
               </View>
             )
-            : (
+          : (
               <FlatList
                 data={convos}
                 keyExtractor={c => c.dmId}
                 renderItem={renderItem}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.list}
+                contentContainerStyle={convos.length === 0 ? styles.listEmpty : styles.list}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor={COLORS.primary}
+                    colors={[COLORS.primary]}
+                  />
+                }
+                ListEmptyComponent={
+                  <View style={styles.empty}>
+                    <Text style={styles.emptyEmoji}>💬</Text>
+                    <Text style={styles.emptyTitle}>No messages yet</Text>
+                    <Text style={styles.emptySub}>Go to Friends → message a friend to start chatting.</Text>
+                  </View>
+                }
               />
             )
         }
@@ -98,6 +124,8 @@ const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20 },
   title: { fontSize: 22, fontWeight: "bold", color: COLORS.textPrimary, marginTop: 8, marginBottom: 20 },
   list: { gap: 4 },
+  listEmpty: { flexGrow: 1 },
+  skeletonList: { gap: 4 },
   row: { flexDirection: "row", alignItems: "center", padding: 14, backgroundColor: COLORS.surface, borderRadius: 16, gap: 14 },
   avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.surfaceAlt, justifyContent: "center", alignItems: "center" },
   avatarEmoji: { fontSize: 26 },

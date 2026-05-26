@@ -11,6 +11,7 @@ import { playTrack, createPlaylistWithTracks } from "@services/spotify";
 import { Linking } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "@hooks/useTheme";
+import { TrackRowSkeleton } from "@components/Skeleton";
 
 const REASON_LABEL = {
   [MIXTAPE_REASON.COMMON_TRACK]: "Both love this",
@@ -191,9 +192,16 @@ export default function MixtapeScreen({ route, navigation }) {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={COLORS.primary} size="large" />
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.skeletonList}>
+          <TrackRowSkeleton />
+          <TrackRowSkeleton />
+          <TrackRowSkeleton />
+          <TrackRowSkeleton />
+          <TrackRowSkeleton />
+          <TrackRowSkeleton />
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -304,6 +312,7 @@ const makeStyles = (COLORS) => StyleSheet.create({
   saveBtnText: { color: "#fff", fontWeight: "700", fontSize: 12 },
 
   list: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 32, gap: 8 },
+  skeletonList: { paddingHorizontal: 14, paddingTop: 12, gap: 8 },
   row: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: COLORS.surface, borderRadius: 14, padding: 10,

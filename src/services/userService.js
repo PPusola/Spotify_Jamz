@@ -6,6 +6,7 @@ import {
   update,
   onValue,
   off,
+  remove,
   serverTimestamp,
   query,
   orderByChild,
@@ -15,6 +16,7 @@ import {
 
 const USERS = "users";
 const USER_PRIVATE = "userPrivate";
+const PUSH_TOKENS = "pushTokens";
 
 // ─── Profile CRUD ─────────────────────────────────────────────────────────────
 
@@ -129,6 +131,36 @@ export async function updatePrivateProfile(uid, { photos, instagram, snapchat })
   if (instagram !== undefined) updates.instagram = (instagram || "").slice(0, 50);
   if (snapchat !== undefined) updates.snapchat = (snapchat || "").slice(0, 50);
   await update(ref(db, `${USER_PRIVATE}/${uid}`), updates);
+}
+
+// ─── Push notification tokens ────────────────────────────────────────────────
+
+/**
+ * Store the device's Expo push token under the user's `pushTokens` map.
+ * Keyed by a safe slug of the token itself so repeat saves are idempotent
+ * (re-registering on the same device just rewrites the same key).
+ */
+export async function savePushToken(uid, token) {
+  if (!uid || !token) return;
+  const key = tokenKey(token);
+  await set(ref(db, `${PUSH_TOKENS}/${uid}/${key}`), {
+    token,
+    updatedAt: Date.now(),
+  });
+}
+
+export async function removePushToken(uid, token) {
+  if (!uid || !token) return;
+  await remove(ref(db, `${PUSH_TOKENS}/${uid}/${tokenKey(token)}`));
+}
+
+function tokenKey(token) {
+  // Firebase keys can't contain . # $ [ ] /  — slug to base36 hash for safety.
+  let h = 0;
+  for (let i = 0; i < token.length; i++) {
+    h = (h * 31 + token.charCodeAt(i)) | 0;
+  }
+  return `t${(h >>> 0).toString(36)}`;
 }
 
 /**

@@ -1,25 +1,33 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, Image,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
-  ScrollView, Linking,
+  ScrollView, Linking, Switch,
 } from "react-native";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import {
   sendMatchMessage, subscribeToMatchChat,
-  revealProfile, subscribeToMatchPfp,
+  revealProfile, unrevealProfile, subscribeToMatchPfp,
   shareComfortableProfile, subscribeToSharedProfile,
+  setMatchTyping, subscribeToMatchTyping,
+  setMatchLastRead, subscribeToMatchLastRead,
+  setMatchReaction,
 } from "@services/matchService";
 import { getPrivateProfile } from "@services/userService";
 import { createRoom } from "@services/roomService";
 import { useTheme } from "@hooks/useTheme";
+import {
+  TypingDots, DateSeparator, ReadReceipt, ReactionBadges, ReactionPicker,
+  groupMessagesByDate,
+} from "@components/ChatExtras";
+import { sendPush } from "@services/pushService";
 
 export default function MatchChatScreen({ route, navigation }) {
   const COLORS = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { matchId, otherNickname, otherEmoji, otherUid } = route.params;
-  const { user } = useAuth();
+  const { user, spotifyToken } = useAuth();
   const { profile } = useProfile();
   const [messages, setMessages] = useState([]);
   const [pfpShared, setPfpShared] = useState({});
@@ -29,15 +37,72 @@ export default function MatchChatScreen({ route, navigation }) {
   const [jamming, setJamming] = useState(false);
   const [revealing, setRevealing] = useState(false);
   const [sharingComfort, setSharingComfort] = useState(false);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const [otherLastRead, setOtherLastRead] = useState(0);
+  const [pickerMsg, setPickerMsg] = useState(null);
+
+  const listRef = useRef(null);
+  const typingTimer = useRef(null);
+  const isTypingRef = useRef(false);
 
   const displayName = profile?.nickname ?? user?.uid?.slice(0, 8) ?? "You";
 
   useEffect(() => {
-    const unsubChat    = subscribeToMatchChat(matchId, setMessages);
-    const unsubPfp     = subscribeToMatchPfp(matchId, setPfpShared);
-    const unsubShared  = subscribeToSharedProfile(matchId, setSharedProfiles);
-    return () => { unsubChat(); unsubPfp(); unsubShared(); };
-  }, [matchId]);
+    const unsubChat     = subscribeToMatchChat(matchId, setMessages);
+    const unsubPfp      = subscribeToMatchPfp(matchId, setPfpShared);
+    const unsubShared   = subscribeToSharedProfile(matchId, setSharedProfiles);
+    const unsubTyping   = otherUid ? subscribeToMatchTyping(matchId, otherUid, setOtherTyping) : null;
+    const unsubLastRead = otherUid ? subscribeToMatchLastRead(matchId, otherUid, setOtherLastRead) : null;
+    if (user?.uid) setMatchLastRead(matchId, user.uid).catch(() => {});
+    return () => {
+      unsubChat(); unsubPfp(); unsubShared();
+      if (unsubTyping) unsubTyping();
+      if (unsubLastRead) unsubLastRead();
+      if (user?.uid) setMatchTyping(matchId, user.uid, false).catch(() => {});
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    };
+  }, [matchId, otherUid, user?.uid]);
+
+  // Mark as read whenever a new message arrives while viewing
+  useEffect(() => {
+    if (!messages.length || !user?.uid) return;
+    const last = messages[messages.length - 1];
+    if (last.uid !== user.uid) {
+      setMatchLastRead(matchId, user.uid).catch(() => {});
+    }
+  }, [messages.length, matchId, user?.uid]);
+
+  // Auto-scroll to bottom on new message (inverted list → offset 0)
+  useEffect(() => {
+    if (!listRef.current) return;
+    listRef.current.scrollToOffset({ offset: 0, animated: true });
+  }, [messages.length]);
+
+  const handleChangeText = useCallback(
+    (val) => {
+      setText(val);
+      const hasText = val.trim().length > 0;
+      if (hasText && !isTypingRef.current) {
+        isTypingRef.current = true;
+        setMatchTyping(matchId, user.uid, true).catch(() => {});
+      }
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+      typingTimer.current = setTimeout(() => {
+        isTypingRef.current = false;
+        setMatchTyping(matchId, user.uid, false).catch(() => {});
+      }, hasText ? 3000 : 0);
+    },
+    [matchId, user?.uid]
+  );
+
+  const handleReact = async (emoji) => {
+    if (!pickerMsg) return;
+    const target = pickerMsg;
+    setPickerMsg(null);
+    try {
+      await setMatchReaction(matchId, target.id, user.uid, emoji);
+    } catch {}
+  };
 
   useEffect(() => {
     navigation.setOptions({
@@ -61,14 +126,18 @@ export default function MatchChatScreen({ route, navigation }) {
   const theyRevealed = !!theirAvatar;
   const bothRevealed = iRevealed && theyRevealed;
 
-  const handleReveal = async () => {
-    if (revealing || iRevealed) return;
+  const handleToggleReveal = async (next) => {
+    if (revealing) return;
     setRevealing(true);
     try {
-      const avatarUrl = profile?.spotifyAvatar || "none";
-      await revealProfile(matchId, user.uid, avatarUrl);
+      if (next) {
+        const avatarUrl = profile?.spotifyAvatar || "none";
+        await revealProfile(matchId, user.uid, avatarUrl);
+      } else {
+        await unrevealProfile(matchId, user.uid);
+      }
     } catch (e) {
-      Alert.alert("Error", "Could not reveal profile.");
+      Alert.alert("Error", e?.message || "Could not update profile share.");
     } finally {
       setRevealing(false);
     }
@@ -132,9 +201,27 @@ export default function MatchChatScreen({ route, navigation }) {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     setText("");
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    isTypingRef.current = false;
+    setMatchTyping(matchId, user.uid, false).catch(() => {});
     setSending(true);
     try {
       await sendMatchMessage(matchId, user.uid, displayName, trimmed);
+      if (otherUid) {
+        sendPush({
+          spotifyAccessToken: spotifyToken,
+          recipientUid: otherUid,
+          title: `${profile?.emoji ?? "🎵"} ${displayName}`,
+          body: trimmed,
+          data: {
+            kind: "match_chat",
+            matchId,
+            otherUid: user.uid,
+            otherNickname: displayName,
+            otherEmoji: profile?.emoji ?? "🎵",
+          },
+        });
+      }
     } finally {
       setSending(false);
     }
@@ -158,8 +245,35 @@ export default function MatchChatScreen({ route, navigation }) {
     }
   };
 
+  // ── Feed assembly: date separators + typing row + messages ────────────────
+  const feed = useMemo(() => {
+    const grouped = groupMessagesByDate(messages);
+    const reversed = [...grouped].reverse();
+    if (otherTyping) reversed.unshift({ type: "typing", id: "__typing__" });
+    return reversed;
+  }, [messages, otherTyping]);
+
+  const lastMyMsgId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].uid === user?.uid) return messages[i].id;
+    }
+    return null;
+  }, [messages, user?.uid]);
+
   // ── Render helpers ────────────────────────────────────────────────────────
   const renderMessage = ({ item }) => {
+    if (item.type === "date") return <DateSeparator label={item.label} />;
+    if (item.type === "typing") {
+      return (
+        <View style={[styles.msgRow, styles.msgRowThem]}>
+          <Text style={styles.msgAvatar}>{otherEmoji ?? "🎵"}</Text>
+          <View style={[styles.bubble, styles.bubbleThem, { paddingVertical: 14 }]}>
+            <TypingDots />
+          </View>
+        </View>
+      );
+    }
+
     const isMe = item.uid === user.uid;
 
     if (item.type === "jam_invite") {
@@ -178,55 +292,83 @@ export default function MatchChatScreen({ route, navigation }) {
       );
     }
 
+    const showRead = isMe && item.id === lastMyMsgId;
+    const isRead = otherLastRead >= (item.sentAt ?? 0);
+
     return (
-      <View style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowThem]}>
-        {!isMe && <Text style={styles.msgAvatar}>{otherEmoji ?? "🎵"}</Text>}
-        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-          {!isMe && <Text style={styles.msgName}>{item.displayName}</Text>}
-          <Text style={styles.msgText}>{item.text}</Text>
-          <Text style={styles.msgTime}>{formatTime(item.sentAt)}</Text>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onLongPress={() => setPickerMsg(item)}
+        delayLongPress={250}
+      >
+        <View style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowThem]}>
+          {!isMe && <Text style={styles.msgAvatar}>{otherEmoji ?? "🎵"}</Text>}
+          <View style={isMe ? styles.bubbleColMe : styles.bubbleColThem}>
+            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+              {!isMe && <Text style={styles.msgName}>{item.displayName}</Text>}
+              <Text style={styles.msgText}>{item.text}</Text>
+              <View style={styles.msgFooter}>
+                <Text style={styles.msgTime}>{formatTime(item.sentAt)}</Text>
+                {showRead && <ReadReceipt isRead={isRead} />}
+              </View>
+            </View>
+            <ReactionBadges
+              reactions={item.reactions}
+              onPress={(emoji) => {
+                const myCurrent = item.reactions?.[user.uid];
+                setMatchReaction(matchId, item.id, user.uid, myCurrent === emoji ? null : emoji).catch(() => {});
+              }}
+            />
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
   // ── Profile reveal banner ─────────────────────────────────────────────────
   const renderRevealBanner = () => {
-    if (bothRevealed) {
-      const myUrl    = myAvatar    !== "none" ? myAvatar    : null;
-      const theirUrl = theirAvatar !== "none" ? theirAvatar : null;
-      return (
-        <View style={styles.revealBanner}>
-          <AvatarBubble url={myUrl}    emoji={profile?.emoji}   label="You" />
-          <Text style={styles.revealHeart}>❤️</Text>
-          <AvatarBubble url={theirUrl} emoji={otherEmoji}       label={otherNickname} />
-        </View>
-      );
-    }
+    const myUrl    = myAvatar    && myAvatar    !== "none" ? myAvatar    : null;
+    const theirUrl = theirAvatar && theirAvatar !== "none" ? theirAvatar : null;
 
-    if (iRevealed) {
-      return (
-        <View style={styles.revealBanner}>
-          <Text style={styles.revealWait}>
-            ✓ Photo shared — waiting for {otherNickname} to reveal...
-          </Text>
-        </View>
-      );
-    }
+    const title = bothRevealed
+      ? "Profiles revealed"
+      : iRevealed
+        ? "Photo shared"
+        : "Profile anonymous";
+
+    const sub = bothRevealed
+      ? `You and ${otherNickname} can see each other's photo`
+      : iRevealed
+        ? `Waiting for ${otherNickname} to reveal too...`
+        : "Toggle on to share your Spotify photo";
 
     return (
-      <TouchableOpacity style={styles.revealBanner} onPress={handleReveal} disabled={revealing} activeOpacity={0.85}>
-        {revealing
-          ? <ActivityIndicator color={COLORS.primary} size="small" />
-          : <>
-              <Text style={styles.revealLock}>🔒</Text>
-              <View>
-                <Text style={styles.revealTitle}>Profiles are anonymous</Text>
-                <Text style={styles.revealSub}>Tap to share your Spotify photo</Text>
-              </View>
-            </>
-        }
-      </TouchableOpacity>
+      <View>
+        <View style={styles.revealToggleRow}>
+          <Text style={styles.revealLock}>{iRevealed ? "🔓" : "🔒"}</Text>
+          <View style={styles.revealTextWrap}>
+            <Text style={styles.revealTitle}>{title}</Text>
+            <Text style={styles.revealSub}>{sub}</Text>
+          </View>
+          {revealing
+            ? <ActivityIndicator color={COLORS.primary} size="small" />
+            : <Switch
+                value={iRevealed}
+                onValueChange={handleToggleReveal}
+                trackColor={{ false: COLORS.surfaceAlt, true: COLORS.primary }}
+                thumbColor="#fff"
+              />
+          }
+        </View>
+
+        {bothRevealed && (
+          <View style={styles.revealAvatarsRow}>
+            <AvatarBubble url={myUrl}    emoji={profile?.emoji} label="You" />
+            <Text style={styles.revealHeart}>❤️</Text>
+            <AvatarBubble url={theirUrl} emoji={otherEmoji}     label={otherNickname} />
+          </View>
+        )}
+      </View>
     );
   };
 
@@ -332,7 +474,8 @@ export default function MatchChatScreen({ route, navigation }) {
       {bothRevealed && renderComfortBanner()}
 
       <FlatList
-        data={[...messages].reverse()}
+        ref={listRef}
+        data={feed}
         keyExtractor={m => m.id}
         renderItem={renderMessage}
         inverted
@@ -346,7 +489,7 @@ export default function MatchChatScreen({ route, navigation }) {
           placeholder="Message..."
           placeholderTextColor={COLORS.textMuted}
           value={text}
-          onChangeText={setText}
+          onChangeText={handleChangeText}
           onSubmitEditing={send}
           returnKeyType="send"
           multiline
@@ -359,6 +502,13 @@ export default function MatchChatScreen({ route, navigation }) {
           <Text style={styles.sendBtnText}>Send</Text>
         </TouchableOpacity>
       </View>
+
+      <ReactionPicker
+        visible={!!pickerMsg}
+        onSelect={handleReact}
+        onClose={() => setPickerMsg(null)}
+        currentReaction={pickerMsg?.reactions?.[user?.uid]}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -403,6 +553,20 @@ const makeStyles = (COLORS) => StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     backgroundColor: COLORS.surface, paddingVertical: 12, paddingHorizontal: 20,
     gap: 12, borderBottomWidth: 1, borderBottomColor: COLORS.surfaceAlt,
+  },
+  revealToggleRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: COLORS.surface,
+    paddingVertical: 10, paddingHorizontal: 16,
+    gap: 12,
+    borderBottomWidth: 1, borderBottomColor: COLORS.surfaceAlt,
+  },
+  revealTextWrap: { flex: 1 },
+  revealAvatarsRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    backgroundColor: COLORS.surface,
+    paddingVertical: 12, paddingHorizontal: 20, gap: 12,
+    borderBottomWidth: 1, borderBottomColor: COLORS.surfaceAlt,
   },
   revealLock: { fontSize: 22 },
   revealTitle: { color: COLORS.textPrimary, fontWeight: "bold", fontSize: 13 },
@@ -455,12 +619,15 @@ const makeStyles = (COLORS) => StyleSheet.create({
   msgRowMe: { justifyContent: "flex-end" },
   msgRowThem: { justifyContent: "flex-start" },
   msgAvatar: { fontSize: 24, marginBottom: 4 },
-  bubble: { maxWidth: "75%", borderRadius: 18, padding: 12 },
+  bubbleColMe: { alignItems: "flex-end", maxWidth: "75%" },
+  bubbleColThem: { alignItems: "flex-start", maxWidth: "75%" },
+  bubble: { borderRadius: 18, padding: 12 },
   bubbleMe: { backgroundColor: COLORS.primary, borderBottomRightRadius: 4 },
   bubbleThem: { backgroundColor: COLORS.surface, borderBottomLeftRadius: 4 },
   msgName: { color: COLORS.textMuted, fontSize: 11, marginBottom: 4 },
   msgText: { color: COLORS.textPrimary, fontSize: 14, lineHeight: 20 },
-  msgTime: { color: COLORS.textMuted + "88", fontSize: 10, marginTop: 4, textAlign: "right" },
+  msgFooter: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginTop: 4 },
+  msgTime: { color: COLORS.textMuted + "88", fontSize: 10 },
 
   jamInviteRow: { alignItems: "center", marginBottom: 12 },
   jamInviteCard: { backgroundColor: COLORS.surfaceAlt, borderRadius: 16, padding: 16, alignItems: "center", borderWidth: 1.5, borderColor: COLORS.primary, width: "80%" },
