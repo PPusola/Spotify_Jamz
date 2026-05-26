@@ -24,6 +24,7 @@ import MatchChatScreen from "@screens/MatchChatScreen";
 import MixtapeScreen from "@screens/MixtapeScreen";
 import DMListScreen from "@screens/DMListScreen";
 import DMChatScreen from "@screens/DMChatScreen";
+import BlockedUsersScreen from "@screens/BlockedUsersScreen";
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -193,6 +194,7 @@ export default function AppNavigator() {
                 title: `${route.params?.otherEmoji ?? "🎵"} ${route.params?.otherNickname ?? "Chat"}`,
               })}
             />
+            <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} options={{ headerShown: false }} />
           </>
         )}
       </Stack.Navigator>

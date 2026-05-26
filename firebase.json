@@ -1,5 +1,8 @@
 {
-  "database": {
-    "rules": "firebase.rules.json"
-  }
+  "database": [
+    {
+      "instance": "tune-match-c71b4-default-rtdb",
+      "rules": "firebase.rules.json"
+    }
+  ]
 }

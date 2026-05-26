@@ -136,6 +136,24 @@
       }
     },
 
+    "blocks": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$otherUid": {
+          ".validate": "!newData.exists() || (newData.hasChildren(['blockedAt']) && newData.child('blockedAt').isNumber() && (!newData.hasChild('nickname') || (newData.child('nickname').isString() && newData.child('nickname').val().length <= 50)))"
+        }
+      }
+    },
+
+    "reports": {
+      ".read": false,
+      "$reportId": {
+        ".write": "auth != null && !data.exists() && newData.child('reporterUid').val() === auth.uid",
+        ".validate": "newData.hasChildren(['reporterUid','reportedUid','reason','createdAt']) && newData.child('reporterUid').isString() && newData.child('reportedUid').isString() && newData.child('reason').isString() && newData.child('reason').val().length <= 100 && newData.child('createdAt').isNumber() && (!newData.hasChild('context') || newData.child('context').isString())"
+      }
+    },
+
     "pushTokens": {
       "$uid": {
         ".read":  "auth != null && auth.uid === $uid",

@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1DB954"
+      "backgroundColor": "#181816"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -21,7 +21,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1DB954"
+        "backgroundColor": "#181816"
       },
       "package": "com.yourname.spotifyjamsesh",
       "googleServicesFile": "./google-services.json"

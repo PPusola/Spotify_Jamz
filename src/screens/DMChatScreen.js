@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import {
@@ -12,6 +13,7 @@ import {
   setDMReaction,
 } from "@services/dmService";
 import { sendPush } from "@services/pushService";
+import { blockUser, reportUser, REPORT_REASONS } from "@services/blockService";
 import { useTheme } from "@hooks/useTheme";
 import {
   TypingDots, DateSeparator, ReadReceipt, ReactionBadges, ReactionPicker,
@@ -20,6 +22,7 @@ import {
 
 export default function DMChatScreen({ route, navigation }) {
   const COLORS = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { otherUid, otherNickname, otherEmoji } = route.params;
   const { user, spotifyToken } = useAuth();
@@ -39,9 +42,79 @@ export default function DMChatScreen({ route, navigation }) {
   const myNickname = profile?.nickname ?? user?.uid?.slice(0, 8) ?? "Me";
   const myEmoji = profile?.emoji ?? "🎵";
 
+  const confirmBlock = () => {
+    if (!otherUid) return;
+    Alert.alert(
+      `Block ${otherNickname || "this user"}?`,
+      "They won't be able to message you and you won't see them in matches or discover.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUser(user.uid, otherUid, otherNickname);
+              navigation.goBack();
+            } catch (e) {
+              Alert.alert("Couldn't block", e?.message || "Unknown error");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const submitReport = async (reason) => {
+    try {
+      await reportUser({
+        reporterUid: user.uid,
+        reportedUid: otherUid,
+        reason,
+        context: `dm:${dmId}`,
+      });
+      Alert.alert(
+        "Report submitted",
+        "Thanks — we'll review this. Block them too if they're bothering you."
+      );
+    } catch (e) {
+      Alert.alert("Couldn't report", e?.message || "Unknown error");
+    }
+  };
+
+  const handleMoreMenu = useCallback(() => {
+    Alert.alert(otherNickname || "Options", undefined, [
+      { text: "🚫 Block user", style: "destructive", onPress: confirmBlock },
+      {
+        text: "🚩 Report user",
+        onPress: () => {
+          const buttons = REPORT_REASONS.map((reason) => ({
+            text: reason,
+            onPress: () => submitReport(reason),
+          }));
+          buttons.push({ text: "Cancel", style: "cancel" });
+          Alert.alert("Report user", "Pick a reason:", buttons);
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [otherNickname, otherUid, user?.uid, dmId]);
+
   useEffect(() => {
-    navigation.setOptions({ title: `${otherEmoji ?? "🎵"} ${otherNickname}` });
-  }, [otherNickname, otherEmoji]);
+    navigation.setOptions({
+      title: `${otherEmoji ?? "🎵"} ${otherNickname}`,
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={handleMoreMenu}
+          style={{ paddingHorizontal: 14, paddingVertical: 6, marginRight: 4 }}
+          activeOpacity={0.7}
+          accessibilityLabel="More options"
+        >
+          <Text style={{ color: COLORS.textPrimary, fontSize: 22, fontWeight: "700" }}>⋮</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [otherNickname, otherEmoji, handleMoreMenu, COLORS.textPrimary]);
 
   // Ensure DM exists and subscribe to messages, typing, and read receipts
   useEffect(() => {
@@ -238,7 +311,7 @@ export default function DMChatScreen({ route, navigation }) {
         showsVerticalScrollIndicator={false}
       />
 
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { paddingBottom: 12 + insets.bottom }]}>
         <TextInput
           style={styles.input}
           placeholder={`Message ${otherNickname}...`}

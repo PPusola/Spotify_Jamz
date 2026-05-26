@@ -7,6 +7,7 @@ import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { getMatches, getMatchOtherProfile } from "@services/matchService";
 import { createRoom } from "@services/roomService";
+import { subscribeToBlocks } from "@services/blockService";
 import { useTheme } from "@hooks/useTheme";
 import { matchLabel, matchColor } from "@utils/similarity";
 import AvatarCircle from "@components/AvatarCircle";
@@ -22,6 +23,12 @@ export default function MatchesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [joiningId, setJoiningId] = useState(null);
+  const [blockedSet, setBlockedSet] = useState(new Set());
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    return subscribeToBlocks(user.uid, (m) => setBlockedSet(new Set(Object.keys(m || {}))));
+  }, [user?.uid]);
 
   const loadMatches = useCallback(async () => {
     if (!user?.uid) return;
@@ -118,13 +125,15 @@ export default function MatchesScreen({ navigation }) {
     );
   };
 
+  const visibleMatches = matches.filter((m) => !blockedSet.has(m.other?.uid));
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={matches}
+        data={visibleMatches}
         keyExtractor={m => m.id}
         renderItem={renderMatch}
-        contentContainerStyle={matches.length === 0 ? styles.listEmpty : styles.list}
+        contentContainerStyle={visibleMatches.length === 0 ? styles.listEmpty : styles.list}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

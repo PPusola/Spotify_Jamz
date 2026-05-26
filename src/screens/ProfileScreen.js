@@ -462,6 +462,19 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.settingChevron}>›</Text>
             </TouchableOpacity>
 
+            {/* Blocked users */}
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => { setSettingsOpen(false); navigation.navigate("BlockedUsers"); }}
+              activeOpacity={0.7}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingTitle}>🚫 Blocked users</Text>
+                <Text style={styles.settingSub}>Manage the people you've blocked</Text>
+              </View>
+              <Text style={styles.settingChevron}>›</Text>
+            </TouchableOpacity>
+
             {/* Log out */}
             <TouchableOpacity
               style={styles.settingRow}

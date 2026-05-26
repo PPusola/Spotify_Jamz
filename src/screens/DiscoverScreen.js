@@ -10,6 +10,7 @@ import { useProfile } from "@hooks/useProfile";
 import { getPublicUsers, getAlreadySeen, likeUser, passUser } from "@services/matchService";
 import { generateAndSaveMixtape } from "@services/mixtapeService";
 import { sendPush } from "@services/pushService";
+import { getBlockedUids } from "@services/blockService";
 import { getVibe, matchLabel, matchColor } from "@utils/similarity";
 import { mlScoreCandidates } from "@utils/mlCompatibility";
 import { useTheme } from "@hooks/useTheme";
@@ -77,11 +78,12 @@ export default function DiscoverScreen({ navigation }) {
     if (!user?.uid || !profile) return;
     setLoading(true);
     try {
-      const [users, seen] = await Promise.all([
+      const [users, seen, blocked] = await Promise.all([
         getPublicUsers(user.uid),
         getAlreadySeen(user.uid),
+        getBlockedUids(user.uid),
       ]);
-      const unseen = users.filter(u => !seen.has(u.uid));
+      const unseen = users.filter(u => !seen.has(u.uid) && !blocked.has(u.uid));
       // ML-based compatibility: vectorize all users, K-Means cluster them,
       // then rank by cosine similarity + same-cluster boost.
       const scored = mlScoreCandidates(profile, unseen);

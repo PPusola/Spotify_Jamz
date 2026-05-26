@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { subscribeToDMList, getOrCreateDM } from "@services/dmService";
+import { subscribeToBlocks } from "@services/blockService";
 import { useTheme } from "@hooks/useTheme";
 import { DMRowSkeleton } from "@components/Skeleton";
 
@@ -18,6 +19,7 @@ export default function DMListScreen({ navigation }) {
   const [convos, setConvos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [blockedSet, setBlockedSet] = useState(new Set());
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -27,6 +29,13 @@ export default function DMListScreen({ navigation }) {
     });
     return unsub;
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    return subscribeToBlocks(user.uid, (m) => setBlockedSet(new Set(Object.keys(m || {}))));
+  }, [user?.uid]);
+
+  const visibleConvos = convos.filter((c) => !blockedSet.has(c.otherUid));
 
   // The DM list is driven by a realtime subscription, so a pull-to-refresh
   // is a no-op data-wise — we just show the spinner briefly so the gesture
@@ -81,11 +90,11 @@ export default function DMListScreen({ navigation }) {
             )
           : (
               <FlatList
-                data={convos}
+                data={visibleConvos}
                 keyExtractor={c => c.dmId}
                 renderItem={renderItem}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={convos.length === 0 ? styles.listEmpty : styles.list}
+                contentContainerStyle={visibleConvos.length === 0 ? styles.listEmpty : styles.list}
                 refreshControl={
                   <RefreshControl
                     refreshing={refreshing}

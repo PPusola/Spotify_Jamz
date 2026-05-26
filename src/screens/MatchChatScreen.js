@@ -4,6 +4,7 @@ import {
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
   ScrollView, Linking, Switch,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import {
@@ -22,9 +23,11 @@ import {
   groupMessagesByDate,
 } from "@components/ChatExtras";
 import { sendPush } from "@services/pushService";
+import { blockUser, reportUser, REPORT_REASONS } from "@services/blockService";
 
 export default function MatchChatScreen({ route, navigation }) {
   const COLORS = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const { matchId, otherNickname, otherEmoji, otherUid } = route.params;
   const { user, spotifyToken } = useAuth();
@@ -104,20 +107,92 @@ export default function MatchChatScreen({ route, navigation }) {
     } catch {}
   };
 
+  const handleMoreMenu = useCallback(() => {
+    Alert.alert(
+      otherNickname || "Options",
+      undefined,
+      [
+        { text: "🚫 Block user", style: "destructive", onPress: () => confirmBlock() },
+        { text: "🚩 Report user", onPress: () => showReportReasons() },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
+  }, [otherNickname, otherUid, user?.uid]);
+
+  const confirmBlock = () => {
+    if (!otherUid) return;
+    Alert.alert(
+      `Block ${otherNickname || "this user"}?`,
+      "They won't be able to message you and you won't see them in matches or discover.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await blockUser(user.uid, otherUid, otherNickname);
+              navigation.goBack();
+            } catch (e) {
+              Alert.alert("Couldn't block", e?.message || "Unknown error");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const showReportReasons = () => {
+    if (!otherUid) return;
+    const buttons = REPORT_REASONS.map((reason) => ({
+      text: reason,
+      onPress: () => submitReport(reason),
+    }));
+    buttons.push({ text: "Cancel", style: "cancel" });
+    Alert.alert("Report user", "Pick a reason:", buttons);
+  };
+
+  const submitReport = async (reason) => {
+    try {
+      await reportUser({
+        reporterUid: user.uid,
+        reportedUid: otherUid,
+        reason,
+        context: `match:${matchId}`,
+      });
+      Alert.alert(
+        "Report submitted",
+        "Thanks — we'll review this. Block them too if they're bothering you."
+      );
+    } catch (e) {
+      Alert.alert("Couldn't report", e?.message || "Unknown error");
+    }
+  };
+
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Mixtape", { matchId, otherNickname, otherUid })}
-          style={styles.headerMixtapeBtn}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.headerMixtapeIcon}>🎵</Text>
-          <Text style={styles.headerMixtapeText}>YOUR MIXTAPE</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Mixtape", { matchId, otherNickname, otherUid })}
+            style={styles.headerMixtapeBtn}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.headerMixtapeIcon}>🎵</Text>
+            <Text style={styles.headerMixtapeText}>YOUR MIXTAPE</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleMoreMenu}
+            style={styles.headerMoreBtn}
+            activeOpacity={0.7}
+            accessibilityLabel="More options"
+          >
+            <Text style={styles.headerMoreText}>⋮</Text>
+          </TouchableOpacity>
+        </View>
       ),
     });
-  }, [navigation, matchId, otherNickname, otherUid]);
+  }, [navigation, matchId, otherNickname, otherUid, handleMoreMenu]);
 
   // ── Pfp reveal state ──────────────────────────────────────────────────────
   const myAvatar    = pfpShared[user?.uid];
@@ -483,7 +558,7 @@ export default function MatchChatScreen({ route, navigation }) {
         showsVerticalScrollIndicator={false}
       />
 
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { paddingBottom: 12 + insets.bottom }]}>
         <TextInput
           style={styles.input}
           placeholder="Message..."
@@ -544,6 +619,11 @@ const makeStyles = (COLORS) => StyleSheet.create({
   },
   headerMixtapeIcon: { fontSize: 12 },
   headerMixtapeText: { color: COLORS.primary, fontSize: 11, fontWeight: "900", letterSpacing: 0.5 },
+  headerMoreBtn: {
+    paddingHorizontal: 10, paddingVertical: 6, marginRight: 8,
+    justifyContent: "center", alignItems: "center",
+  },
+  headerMoreText: { color: COLORS.textPrimary, fontSize: 22, fontWeight: "700" },
 
   jamBanner: { backgroundColor: COLORS.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, gap: 8 },
   jamBannerIcon: { fontSize: 18 },

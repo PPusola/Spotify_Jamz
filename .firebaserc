@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "tune-match-c71b4"
-  }
+  },
+  "targets": {
+    "tune-match-c71b4": {
+      "database": {
+        "default": [
+          "tune-match-c71b4-default-rtdb"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
