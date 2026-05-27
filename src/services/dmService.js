@@ -17,6 +17,9 @@ export async function getOrCreateDM(myUid, otherUid) {
       createdAt: Date.now(),
     });
   }
+  // Clear any stale "hidden" flag from a previous deleted-account session so
+  // re-engaging surfaces the conversation again instead of filtering it out.
+  await remove(ref(db, `${DMS}/${dmId}/hiddenFor/${myUid}`)).catch(() => {});
   return dmId;
 }
 

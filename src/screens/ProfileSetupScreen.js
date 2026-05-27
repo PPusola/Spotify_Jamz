@@ -46,6 +46,8 @@ export default function ProfileSetupScreen({ navigation, route }) {
         isPublic,
         spotifyDisplayName: spotifyProfile?.display_name ?? null,
         spotifyPfp: spotifyProfile?.images?.[0]?.url ?? null,
+        useSpotifyPhoto: true,
+        showPhotoInDiscover: true,
         followerCount: spotifyProfile?.followers?.total ?? 0,
         topArtists: (route.params?.topArtists ?? []).filter(Boolean),
         topGenres: (route.params?.topGenres ?? []).filter(Boolean),

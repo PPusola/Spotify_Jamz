@@ -15,9 +15,10 @@ import {
   setMatchLastRead, subscribeToMatchLastRead,
   setMatchReaction,
 } from "@services/matchService";
-import { getPrivateProfile } from "@services/userService";
+import { getPrivateProfile, getProfile } from "@services/userService";
 import { createRoom } from "@services/roomService";
 import { useTheme } from "@hooks/useTheme";
+import { effectivePhotoUrl } from "@utils/photoVisibility";
 import {
   TypingDots, DateSeparator, ReadReceipt, ReactionBadges, ReactionPicker,
   groupMessagesByDate,
@@ -29,9 +30,39 @@ export default function MatchChatScreen({ route, navigation }) {
   const COLORS = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
-  const { matchId, otherNickname, otherEmoji, otherUid } = route.params;
+  const { matchId, otherNickname, otherEmoji, otherUid, otherPhotoUrl } = route.params;
   const { user, spotifyToken } = useAuth();
   const { profile } = useProfile();
+
+  // Resolve the other user's live profile so a deleted account shows up as
+  // "Deleted account" instead of the cached nickname from navigation params.
+  const [other, setOther] = useState({
+    nickname: otherNickname,
+    emoji: otherEmoji,
+    photoUrl: otherPhotoUrl,
+    deleted: false,
+  });
+
+  useEffect(() => {
+    if (!otherUid) return;
+    let cancelled = false;
+    getProfile(otherUid)
+      .then((p) => {
+        if (cancelled) return;
+        if (!p) {
+          setOther({ nickname: "Deleted account", emoji: "👻", photoUrl: null, deleted: true });
+        } else {
+          setOther({
+            nickname: p.nickname ?? otherNickname,
+            emoji: p.emoji ?? otherEmoji,
+            photoUrl: effectivePhotoUrl(p, "chat"),
+            deleted: false,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [otherUid]);
   const [messages, setMessages] = useState([]);
   const [pfpShared, setPfpShared] = useState({});
   const [sharedProfiles, setSharedProfiles] = useState({});
@@ -171,6 +202,16 @@ export default function MatchChatScreen({ route, navigation }) {
 
   useEffect(() => {
     navigation.setOptions({
+      headerTitle: () => (
+        <View style={styles.headerTitleWrap}>
+          {other.photoUrl
+            ? <Image source={{ uri: other.photoUrl }} style={styles.headerAvatarImg} />
+            : <Text style={styles.headerAvatarEmoji}>{other.emoji || "🎵"}</Text>}
+          <Text style={styles.headerTitleText} numberOfLines={1}>
+            {other.nickname || "Match"}
+          </Text>
+        </View>
+      ),
       headerRight: () => (
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <TouchableOpacity
@@ -192,7 +233,7 @@ export default function MatchChatScreen({ route, navigation }) {
         </View>
       ),
     });
-  }, [navigation, matchId, otherNickname, otherUid, handleMoreMenu]);
+  }, [navigation, matchId, otherNickname, otherUid, handleMoreMenu, other.nickname, other.emoji, other.photoUrl]);
 
   // ── Pfp reveal state ──────────────────────────────────────────────────────
   const myAvatar    = pfpShared[user?.uid];
@@ -206,7 +247,7 @@ export default function MatchChatScreen({ route, navigation }) {
     setRevealing(true);
     try {
       if (next) {
-        const avatarUrl = profile?.spotifyAvatar || "none";
+        const avatarUrl = profile?.spotifyPfp || "none";
         await revealProfile(matchId, user.uid, avatarUrl);
       } else {
         await unrevealProfile(matchId, user.uid);
@@ -341,7 +382,7 @@ export default function MatchChatScreen({ route, navigation }) {
     if (item.type === "typing") {
       return (
         <View style={[styles.msgRow, styles.msgRowThem]}>
-          <Text style={styles.msgAvatar}>{otherEmoji ?? "🎵"}</Text>
+          <MsgAvatar photoUrl={other.photoUrl} emoji={other.emoji} styles={styles} />
           <View style={[styles.bubble, styles.bubbleThem, { paddingVertical: 14 }]}>
             <TypingDots />
           </View>
@@ -377,10 +418,10 @@ export default function MatchChatScreen({ route, navigation }) {
         delayLongPress={250}
       >
         <View style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowThem]}>
-          {!isMe && <Text style={styles.msgAvatar}>{otherEmoji ?? "🎵"}</Text>}
+          {!isMe && <MsgAvatar photoUrl={other.photoUrl} emoji={other.emoji} styles={styles} />}
           <View style={isMe ? styles.bubbleColMe : styles.bubbleColThem}>
             <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
-              {!isMe && <Text style={styles.msgName}>{item.displayName}</Text>}
+              {!isMe && <Text style={styles.msgName}>{other.nickname}</Text>}
               <Text style={styles.msgText}>{item.text}</Text>
               <View style={styles.msgFooter}>
                 <Text style={styles.msgTime}>{formatTime(item.sentAt)}</Text>
@@ -588,6 +629,13 @@ export default function MatchChatScreen({ route, navigation }) {
   );
 }
 
+function MsgAvatar({ photoUrl, emoji, styles }) {
+  if (photoUrl) {
+    return <Image source={{ uri: photoUrl }} style={styles.msgAvatarImg} />;
+  }
+  return <Text style={styles.msgAvatar}>{emoji ?? "🎵"}</Text>;
+}
+
 function AvatarBubble({ url, emoji, label }) {
   const COLORS = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
@@ -609,6 +657,11 @@ function formatTime(ms) {
 
 const makeStyles = (COLORS) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+
+  headerTitleWrap: { flexDirection: "row", alignItems: "center", gap: 8, maxWidth: 200 },
+  headerAvatarImg: { width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.surfaceAlt },
+  headerAvatarEmoji: { fontSize: 20 },
+  headerTitleText: { color: COLORS.textPrimary, fontSize: 17, fontWeight: "bold", flexShrink: 1 },
 
   headerMixtapeBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
@@ -699,6 +752,7 @@ const makeStyles = (COLORS) => StyleSheet.create({
   msgRowMe: { justifyContent: "flex-end" },
   msgRowThem: { justifyContent: "flex-start" },
   msgAvatar: { fontSize: 24, marginBottom: 4 },
+  msgAvatarImg: { width: 28, height: 28, borderRadius: 14, marginBottom: 4, backgroundColor: COLORS.surfaceAlt },
   bubbleColMe: { alignItems: "flex-end", maxWidth: "75%" },
   bubbleColThem: { alignItems: "flex-start", maxWidth: "75%" },
   bubble: { borderRadius: 18, padding: 12 },

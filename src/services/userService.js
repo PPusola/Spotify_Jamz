@@ -42,7 +42,9 @@ export async function createProfile(uid, profileData) {
     topArtists: cleanArray(profileData.topArtists),
     topTracks: cleanArray(profileData.topTracks),
     spotifyDisplayName: clean(profileData.spotifyDisplayName),
-    spotifyAvatar: clean(profileData.spotifyAvatar),
+    spotifyPfp: clean(profileData.spotifyPfp),
+    useSpotifyPhoto: profileData.useSpotifyPhoto ?? true,
+    showPhotoInDiscover: profileData.showPhotoInDiscover ?? true,
     followerCount: clean(profileData.followerCount),
     createdAt: Date.now(),
     currentRoom: null,
@@ -92,6 +94,23 @@ export async function setOnlineStatus(uid, online, currentRoom = null) {
 export async function setCurrentTrack(uid, trackInfo) {
   await update(ref(db, `${USERS}/${uid}`), {
     currentTrack: trackInfo,
+  });
+}
+
+/**
+ * Write the user's live "now playing" snapshot. Stamped with updatedAt so
+ * readers can ignore stale data (the user closed the app a while ago).
+ */
+export async function setNowPlaying(uid, np) {
+  if (!uid || !np) return;
+  await update(ref(db, `${USERS}/${uid}`), {
+    nowPlaying: {
+      trackName: np.trackName ?? "",
+      artistName: np.artistName ?? "",
+      albumArt: np.albumArt ?? null,
+      isPlaying: !!np.isPlaying,
+      updatedAt: Date.now(),
+    },
   });
 }
 

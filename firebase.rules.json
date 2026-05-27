@@ -116,6 +116,13 @@
         "mixtape": {
           ".write": "auth == null || (auth != null && (root.child('matches').child($matchId).child('user1').val() === auth.uid || root.child('matches').child($matchId).child('user2').val() === auth.uid))",
           ".validate": "newData.hasChildren(['tracks','generatedAt']) && newData.child('generatedAt').isNumber()"
+        },
+
+        "hiddenFor": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && (root.child('matches').child($matchId).child('user1').val() === auth.uid || root.child('matches').child($matchId).child('user2').val() === auth.uid)",
+            ".validate": "newData.isBoolean()"
+          }
         }
       }
     },
@@ -125,13 +132,17 @@
 
       "$uid": {
         ".write": "auth != null && auth.uid === $uid",
-        ".validate": "newData.hasChildren(['nickname','createdAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 1 && newData.child('nickname').val().length <= 50 && newData.child('createdAt').isNumber() && (!newData.hasChild('isPublic') || newData.child('isPublic').isBoolean())",
+        ".validate": "newData.hasChildren(['nickname','createdAt']) && newData.child('nickname').isString() && newData.child('nickname').val().length >= 1 && newData.child('nickname').val().length <= 50 && newData.child('createdAt').isNumber() && (!newData.hasChild('isPublic') || newData.child('isPublic').isBoolean()) && (!newData.hasChild('spotifyPfp') || (newData.child('spotifyPfp').isString() && newData.child('spotifyPfp').val().length <= 500)) && (!newData.hasChild('useSpotifyPhoto') || newData.child('useSpotifyPhoto').isBoolean()) && (!newData.hasChild('showPhotoInDiscover') || newData.child('showPhotoInDiscover').isBoolean())",
 
         "ratings": {
           "$trackId": {
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "newData.hasChildren(['trackUri','trackName','artistName','rating','ratedAt']) && newData.child('trackUri').isString() && newData.child('trackName').isString() && newData.child('artistName').isString() && newData.child('rating').isNumber() && newData.child('rating').val() >= 1 && newData.child('rating').val() <= 10 && newData.child('ratedAt').isNumber()"
           }
+        },
+
+        "nowPlaying": {
+          ".validate": "newData.hasChildren(['updatedAt']) && newData.child('updatedAt').isNumber() && (!newData.hasChild('trackName') || (newData.child('trackName').isString() && newData.child('trackName').val().length <= 300)) && (!newData.hasChild('artistName') || (newData.child('artistName').isString() && newData.child('artistName').val().length <= 300)) && (!newData.hasChild('albumArt') || (newData.child('albumArt').isString() && newData.child('albumArt').val().length <= 500)) && (!newData.hasChild('isPlaying') || newData.child('isPlaying').isBoolean())"
         }
       }
     },
@@ -142,6 +153,16 @@
         ".write": "auth != null && auth.uid === $uid",
         "$otherUid": {
           ".validate": "!newData.exists() || (newData.hasChildren(['blockedAt']) && newData.child('blockedAt').isNumber() && (!newData.hasChild('nickname') || (newData.child('nickname').isString() && newData.child('nickname').val().length <= 50)))"
+        }
+      }
+    },
+
+    "blockedBy": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$blockerUid": {
+          ".write": "auth != null && auth.uid === $blockerUid",
+          ".validate": "newData.isBoolean()"
         }
       }
     },
@@ -231,6 +252,13 @@
           "$uid": {
             ".write": "auth != null && auth.uid === $uid && root.child('dms').child($dmId).child('info/participants').hasChild(auth.uid)",
             ".validate": "newData.isNumber()"
+          }
+        },
+
+        "hiddenFor": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && root.child('dms').child($dmId).child('info/participants').hasChild(auth.uid)",
+            ".validate": "newData.isBoolean()"
           }
         }
       }

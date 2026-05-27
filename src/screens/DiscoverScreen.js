@@ -13,6 +13,8 @@ import { sendPush } from "@services/pushService";
 import { getBlockedUids } from "@services/blockService";
 import { getVibe, matchLabel, matchColor } from "@utils/similarity";
 import { mlScoreCandidates } from "@utils/mlCompatibility";
+import { effectivePhotoUrl } from "@utils/photoVisibility";
+import { liveTrack } from "@utils/nowPlaying";
 import { useTheme } from "@hooks/useTheme";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
@@ -200,6 +202,7 @@ export default function DiscoverScreen({ navigation }) {
       otherNickname: other.nickname,
       otherEmoji: other.emoji,
       otherUid: other.uid,
+      otherPhotoUrl: effectivePhotoUrl(other, "chat"),
     });
   };
 
@@ -316,9 +319,9 @@ export default function DiscoverScreen({ navigation }) {
             </Text>
 
             <View style={styles.matchAvatars}>
-              <AvatarCircle name={profile?.nickname} size={68} />
+              <AvatarCircle photoUrl={effectivePhotoUrl(profile, "chat")} name={profile?.nickname} size={68} />
               <Text style={styles.heartEmoji}>❤️</Text>
-              <AvatarCircle name={matchModal?.other?.nickname} size={68} />
+              <AvatarCircle photoUrl={effectivePhotoUrl(matchModal?.other, "chat")} name={matchModal?.other?.nickname} size={68} />
             </View>
 
             <View style={styles.matchPctWrap}>
@@ -350,6 +353,7 @@ function CardContent({ card, vibe, score }) {
   const genres = toArr(card.topGenres).slice(0, 4);
   const artists = toArr(card.topArtists).slice(0, 4);
   const pct = score !== undefined ? Math.round(score * 100) : Math.round((card.score || 0) * 100);
+  const np = liveTrack(card.nowPlaying);
 
   return (
     <View style={styles.cardInner}>
@@ -363,7 +367,13 @@ function CardContent({ card, vibe, score }) {
             <Text style={styles.vibeTopText}>🌙 {vibe}</Text>
           </View>
         )}
-        <AvatarCircle name={card.nickname} size={96} useGradient style={styles.cardAvatar} />
+        <AvatarCircle
+          photoUrl={effectivePhotoUrl(card, "discover")}
+          name={card.nickname}
+          size={96}
+          useGradient
+          style={styles.cardAvatar}
+        />
       </LinearGradient>
 
       {/* Body info */}
@@ -376,6 +386,14 @@ function CardContent({ card, vibe, score }) {
             </View>
           )}
         </View>
+
+        {np && (
+          <View style={styles.nowPlayingPill}>
+            <Text style={styles.nowPlayingText} numberOfLines={1}>
+              🎧 {np.trackName}{np.artistName ? ` · ${np.artistName}` : ""}
+            </Text>
+          </View>
+        )}
 
         {pct > 0 && (
           <View style={styles.compatSection}>
@@ -456,6 +474,13 @@ const makeStyles = (COLORS) => StyleSheet.create({
 
   compatSection: { marginBottom: 12 },
   compatLabel: { color: COLORS.textMuted, fontSize: 11 },
+  nowPlayingPill: {
+    alignSelf: "flex-start",
+    backgroundColor: COLORS.liveGreen + "22",
+    borderWidth: 1, borderColor: COLORS.liveGreen + "55",
+    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 12,
+  },
+  nowPlayingText: { color: COLORS.liveGreen, fontSize: 11, fontWeight: "600", maxWidth: 240 },
 
   stamp: {
     position: "absolute", top: 40, zIndex: 10,

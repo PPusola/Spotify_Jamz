@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
 import { useTheme } from "@hooks/useTheme";
 import { useNotifications } from "@hooks/useNotifications";
+import { useNowPlaying } from "@hooks/useNowPlaying";
 import { profileExists } from "@services/userService";
 import { getMe, getTopArtists, getTopGenres, getTopTracks } from "@services/spotify";
 
@@ -53,6 +54,8 @@ function MainTabs() {
   const COLORS = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const insets = useSafeAreaInsets();
+  const { user, spotifyToken } = useAuth();
+  useNowPlaying(spotifyToken, user?.uid);
   const tabBarStyle = useMemo(
     () => [
       styles.tabBar,

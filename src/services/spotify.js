@@ -148,6 +148,26 @@ export async function getPlaybackState(accessToken) {
   return spotifyFetch("/me/player", accessToken);
 }
 
+/**
+ * Lightweight "what am I listening to right now" snapshot for the live status
+ * feature. Returns { trackName, artistName, albumArt, isPlaying } or null when
+ * nothing is active (no device, private session, or the call is unavailable).
+ */
+export async function getNowPlaying(accessToken) {
+  try {
+    const data = await spotifyFetch("/me/player/currently-playing", accessToken);
+    if (!data || !data.item) return null;
+    return {
+      trackName: (data.item.name ?? "").slice(0, 200),
+      artistName: (data.item.artists?.[0]?.name ?? "").slice(0, 200),
+      albumArt: data.item.album?.images?.[data.item.album.images.length - 1]?.url ?? null,
+      isPlaying: !!data.is_playing,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function playTrack(trackUri, positionMs = 0, accessToken) {
   return spotifyFetch("/me/player/play", accessToken, {
     method: "PUT",

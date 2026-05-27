@@ -1,4 +1,4 @@
-// Cloudflare Worker — two endpoints:
+// Cloudflare Worker — three endpoints:
 //
 //   POST /                Mint a Firebase custom token for a verified Spotify user.
 //   POST /notify          Send a push notification to a Firebase user via the
@@ -7,6 +7,14 @@
 //                         recipient's push tokens from Firebase RTDB (using
 //                         OAuth derived from the service account), and forwards
 //                         to https://exp.host/--/api/v2/push/send.
+//   POST /retire          Rotate the Spotify account's Firebase UID. Called when
+//                         a user deletes their account so the next login mints a
+//                         brand-new UID (fresh start), leaving old chats pointing
+//                         at the now-dead UID (shown as "Deleted account").
+//
+// UID resolution: spotifyUidMap/{spotifyId} = { uid, gen } records the *current*
+// active UID for each Spotify account. Legacy/first logins default to the
+// deterministic spotify_<id> (gen 0), preserving existing users' data.
 //
 // Env vars (Wrangler secrets):
 //   FIREBASE_SERVICE_ACCOUNT  Stringified service account JSON.
@@ -27,6 +35,9 @@ export default {
     if (url.pathname === "/notify") {
       return handleNotify(request, env);
     }
+    if (url.pathname === "/retire") {
+      return handleRetire(request, env);
+    }
     return handleMintToken(request, env);
   },
 };
@@ -44,17 +55,83 @@ async function handleMintToken(request, env) {
 
   const me = await verifySpotifyToken(spotifyAccessToken);
   if (!me) return jsonError(401, "Spotify token rejected");
-  const uid = `spotify_${me.id}`;
 
   const serviceAccount = parseServiceAccount(env);
   if (!serviceAccount) return jsonError(500, "Worker secret FIREBASE_SERVICE_ACCOUNT is not valid JSON");
+
+  // Resolve the active UID for this Spotify account. The map lets a deleted
+  // account come back with a fresh UID; legacy users with no map entry keep
+  // the deterministic spotify_<id> (and we record it so future logins are stable).
+  let uid = `spotify_${me.id}`;
+  if (env.FIREBASE_DB_URL) {
+    const accessToken = await getGoogleAccessToken(serviceAccount, [
+      "https://www.googleapis.com/auth/firebase.database",
+    ]);
+    if (accessToken) {
+      const existing = await readUidMap(env, accessToken, me.id);
+      if (existing?.uid) {
+        uid = existing.uid;
+      } else {
+        await writeUidMap(env, accessToken, me.id, { uid, gen: 0 });
+      }
+    }
+  }
 
   const firebaseToken = await mintFirebaseCustomToken({
     uid,
     serviceAccount,
     claims: { spotifyId: me.id },
   });
-  return jsonOk({ firebaseToken, spotifyId: me.id });
+  return jsonOk({ firebaseToken, spotifyId: me.id, uid });
+}
+
+// ─── /retire  — rotate the account's UID (called on account deletion) ────────
+
+async function handleRetire(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return jsonError(400, "Invalid JSON body"); }
+
+  const spotifyAccessToken = body?.spotifyAccessToken;
+  if (!spotifyAccessToken) return jsonError(400, "spotifyAccessToken required");
+
+  const me = await verifySpotifyToken(spotifyAccessToken);
+  if (!me) return jsonError(401, "Spotify token rejected");
+
+  const serviceAccount = parseServiceAccount(env);
+  if (!serviceAccount) return jsonError(500, "Worker secret FIREBASE_SERVICE_ACCOUNT is not valid JSON");
+  if (!env.FIREBASE_DB_URL) return jsonError(500, "FIREBASE_DB_URL not configured");
+
+  const accessToken = await getGoogleAccessToken(serviceAccount, [
+    "https://www.googleapis.com/auth/firebase.database",
+  ]);
+  if (!accessToken) return jsonError(500, "Could not mint Google access token");
+
+  const existing = await readUidMap(env, accessToken, me.id);
+  const gen = (existing?.gen ?? 0) + 1;
+  const nextUid = `spotify_${me.id}_g${gen}`;
+  await writeUidMap(env, accessToken, me.id, { uid: nextUid, gen });
+  return jsonOk({ retired: true, nextUid });
+}
+
+// ─── UID map (RTDB) helpers ──────────────────────────────────────────────────
+
+function uidMapUrl(env, spotifyId, accessToken) {
+  return `${stripTrailingSlash(env.FIREBASE_DB_URL)}/spotifyUidMap/${encodeURIComponent(spotifyId)}.json?access_token=${encodeURIComponent(accessToken)}`;
+}
+
+async function readUidMap(env, accessToken, spotifyId) {
+  const res = await fetch(uidMapUrl(env, spotifyId, accessToken));
+  if (!res.ok) return null;
+  const json = await res.json().catch(() => null);
+  return json && typeof json.uid === "string" ? json : null;
+}
+
+async function writeUidMap(env, accessToken, spotifyId, value) {
+  await fetch(uidMapUrl(env, spotifyId, accessToken), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(value),
+  }).catch(() => {});
 }
 
 // ─── /notify  — send a push notification ─────────────────────────────────────

@@ -7,9 +7,10 @@ import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { getMatches, getMatchOtherProfile } from "@services/matchService";
 import { createRoom } from "@services/roomService";
-import { subscribeToBlocks } from "@services/blockService";
+import { subscribeToHiddenUids } from "@services/blockService";
 import { useTheme } from "@hooks/useTheme";
-import { matchLabel, matchColor } from "@utils/similarity";
+import { effectivePhotoUrl } from "@utils/photoVisibility";
+import { liveTrack } from "@utils/nowPlaying";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
 import { MatchRowSkeleton } from "@components/Skeleton";
@@ -27,20 +28,29 @@ export default function MatchesScreen({ navigation }) {
 
   useEffect(() => {
     if (!user?.uid) return;
-    return subscribeToBlocks(user.uid, (m) => setBlockedSet(new Set(Object.keys(m || {}))));
+    return subscribeToHiddenUids(user.uid, setBlockedSet);
   }, [user?.uid]);
 
   const loadMatches = useCallback(async () => {
     if (!user?.uid) return;
     try {
       const raw = await getMatches(user.uid);
+      // Drop matches I've hidden (set when I deleted my account previously).
+      const visible = raw.filter((m) => !m.hiddenFor?.[user.uid]);
       const withProfiles = await Promise.all(
-        raw.map(async (m) => {
+        visible.map(async (m) => {
           const other = await getMatchOtherProfile(m, user.uid);
-          return { ...m, other };
+          if (other) return { ...m, other };
+          // Other user deleted their account — keep the match visible with
+          // a placeholder so the chat doesn't silently disappear.
+          const otherUid = m.user1 === user.uid ? m.user2 : m.user1;
+          return {
+            ...m,
+            other: { uid: otherUid, nickname: "Deleted account", emoji: "👻", deleted: true },
+          };
         })
       );
-      setMatches(withProfiles.filter(m => m.other));
+      setMatches(withProfiles);
     } finally {
       setLoading(false);
     }
@@ -81,22 +91,24 @@ export default function MatchesScreen({ navigation }) {
   }
 
   const renderMatch = ({ item }) => {
-    const pct = item.score ?? 0;
-    const label = matchLabel(pct / 100);
     const isJamming = joiningId === item.id;
+    const np = liveTrack(item.other?.nowPlaying);
 
     return (
       <View style={styles.card}>
-        <AvatarCircle name={item.other?.nickname} size={52} />
+        <AvatarCircle
+          photoUrl={effectivePhotoUrl(item.other, "chat")}
+          name={item.other?.nickname}
+          size={52}
+        />
 
         <View style={styles.info}>
           <Text style={styles.nickname}>{item.other?.nickname}</Text>
-          <View style={styles.metaRow}>
-            <View style={styles.pctBadge}>
-              <Text style={styles.pctText}>{pct}%</Text>
-            </View>
-            <Text style={styles.label}>{label}</Text>
-          </View>
+          {np && (
+            <Text style={styles.nowPlaying} numberOfLines={1}>
+              🎧 {np.trackName}{np.artistName ? ` · ${np.artistName}` : ""}
+            </Text>
+          )}
         </View>
 
         <View style={styles.cardActions}>
@@ -107,6 +119,7 @@ export default function MatchesScreen({ navigation }) {
               otherNickname: item.other?.nickname,
               otherEmoji: item.other?.emoji,
               otherUid: item.other?.uid,
+              otherPhotoUrl: effectivePhotoUrl(item.other, "chat"),
             })}
           >
             <Text style={styles.chatBtnText}>💬</Text>
@@ -114,7 +127,7 @@ export default function MatchesScreen({ navigation }) {
 
           <GradientButton
             onPress={() => handleJam(item)}
-            disabled={!!joiningId}
+            disabled={!!joiningId || item.other?.deleted}
             loading={isJamming}
             label="🎵 Jam"
             gradientStyle={styles.jamGradient}
@@ -174,15 +187,8 @@ const makeStyles = (COLORS) => StyleSheet.create({
     gap: 12,
   },
   info: { flex: 1 },
-  nickname: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "bold", marginBottom: 6 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  pctBadge: {
-    backgroundColor: COLORS.primary + "22",
-    borderWidth: 1, borderColor: COLORS.primary + "55",
-    borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2,
-  },
-  pctText: { color: COLORS.primary, fontSize: 11, fontWeight: "bold" },
-  label: { color: COLORS.textMuted, fontSize: 12 },
+  nickname: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "bold" },
+  nowPlaying: { color: COLORS.liveGreen, fontSize: 11, marginTop: 5 },
 
   cardActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   chatBtn: {

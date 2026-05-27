@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
-  View, Text, FlatList, TextInput, TouchableOpacity,
+  View, Text, FlatList, TextInput, TouchableOpacity, Image,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,6 +14,8 @@ import {
 } from "@services/dmService";
 import { sendPush } from "@services/pushService";
 import { blockUser, reportUser, REPORT_REASONS } from "@services/blockService";
+import { getProfile } from "@services/userService";
+import { effectivePhotoUrl } from "@utils/photoVisibility";
 import { useTheme } from "@hooks/useTheme";
 import {
   TypingDots, DateSeparator, ReadReceipt, ReactionBadges, ReactionPicker,
@@ -27,6 +29,36 @@ export default function DMChatScreen({ route, navigation }) {
   const { otherUid, otherNickname, otherEmoji } = route.params;
   const { user, spotifyToken } = useAuth();
   const { profile } = useProfile();
+
+  // Resolve the other user's live profile so a deleted account shows up as
+  // "Deleted account" instead of the cached nickname from navigation params.
+  const [other, setOther] = useState({
+    nickname: otherNickname,
+    emoji: otherEmoji,
+    photoUrl: null,
+    deleted: false,
+  });
+
+  useEffect(() => {
+    if (!otherUid) return;
+    let cancelled = false;
+    getProfile(otherUid)
+      .then((p) => {
+        if (cancelled) return;
+        if (!p) {
+          setOther({ nickname: "Deleted account", emoji: "👻", photoUrl: null, deleted: true });
+        } else {
+          setOther({
+            nickname: p.nickname ?? otherNickname,
+            emoji: p.emoji ?? otherEmoji,
+            photoUrl: effectivePhotoUrl(p, "chat"),
+            deleted: false,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [otherUid]);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -102,7 +134,14 @@ export default function DMChatScreen({ route, navigation }) {
 
   useEffect(() => {
     navigation.setOptions({
-      title: `${otherEmoji ?? "🎵"} ${otherNickname}`,
+      headerTitle: () => (
+        <View style={styles.headerTitleWrap}>
+          {other.photoUrl
+            ? <Image source={{ uri: other.photoUrl }} style={styles.headerAvatarImg} />
+            : <Text style={styles.headerAvatarEmoji}>{other.emoji || "🎵"}</Text>}
+          <Text style={styles.headerTitleText} numberOfLines={1}>{other.nickname || "Chat"}</Text>
+        </View>
+      ),
       headerRight: () => (
         <TouchableOpacity
           onPress={handleMoreMenu}
@@ -114,7 +153,7 @@ export default function DMChatScreen({ route, navigation }) {
         </TouchableOpacity>
       ),
     });
-  }, [otherNickname, otherEmoji, handleMoreMenu, COLORS.textPrimary]);
+  }, [other.nickname, other.emoji, other.photoUrl, handleMoreMenu, COLORS.textPrimary, styles]);
 
   // Ensure DM exists and subscribe to messages, typing, and read receipts
   useEffect(() => {
@@ -188,7 +227,7 @@ export default function DMChatScreen({ route, navigation }) {
     setDMTyping(dmId, user.uid, false).catch(() => {});
     setSending(true);
     try {
-      await sendDM(dmId, user.uid, myNickname, myEmoji, otherUid, otherNickname, otherEmoji, trimmed);
+      await sendDM(dmId, user.uid, myNickname, myEmoji, otherUid, other.nickname, other.emoji, trimmed);
       sendPush({
         spotifyAccessToken: spotifyToken,
         recipientUid: otherUid,
@@ -245,9 +284,7 @@ export default function DMChatScreen({ route, navigation }) {
     if (item.type === "typing") {
       return (
         <View style={[styles.msgRow, styles.msgRowThem]}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarEmoji}>{otherEmoji ?? "🎵"}</Text>
-          </View>
+          <DMAvatar photoUrl={other.photoUrl} emoji={other.emoji} styles={styles} />
           <View style={[styles.bubble, styles.bubbleThem, styles.typingBubble]}>
             <TypingDots />
           </View>
@@ -266,11 +303,7 @@ export default function DMChatScreen({ route, navigation }) {
         delayLongPress={250}
       >
         <View style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowThem]}>
-          {!isMe && (
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarEmoji}>{otherEmoji ?? "🎵"}</Text>
-            </View>
-          )}
+          {!isMe && <DMAvatar photoUrl={other.photoUrl} emoji={other.emoji} styles={styles} />}
           <View style={isMe ? styles.bubbleColMe : styles.bubbleColThem}>
             <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
               <Text style={styles.msgText}>{item.text}</Text>
@@ -314,7 +347,7 @@ export default function DMChatScreen({ route, navigation }) {
       <View style={[styles.inputRow, { paddingBottom: 12 + insets.bottom }]}>
         <TextInput
           style={styles.input}
-          placeholder={`Message ${otherNickname}...`}
+          placeholder={`Message ${other.nickname}...`}
           placeholderTextColor={COLORS.textMuted}
           value={text}
           onChangeText={handleChangeText}
@@ -344,6 +377,17 @@ export default function DMChatScreen({ route, navigation }) {
   );
 }
 
+function DMAvatar({ photoUrl, emoji, styles }) {
+  if (photoUrl) {
+    return <Image source={{ uri: photoUrl }} style={styles.avatarImg} />;
+  }
+  return (
+    <View style={styles.avatarCircle}>
+      <Text style={styles.avatarEmoji}>{emoji ?? "🎵"}</Text>
+    </View>
+  );
+}
+
 function formatTime(ms) {
   if (!ms) return "";
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -356,7 +400,12 @@ const makeStyles = (COLORS) => StyleSheet.create({
   msgRowMe: { justifyContent: "flex-end" },
   msgRowThem: { justifyContent: "flex-start" },
   avatarCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.surfaceAlt, justifyContent: "center", alignItems: "center", marginBottom: 2 },
+  avatarImg: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.surfaceAlt, marginBottom: 2 },
   avatarEmoji: { fontSize: 16 },
+  headerTitleWrap: { flexDirection: "row", alignItems: "center", gap: 8, maxWidth: 220 },
+  headerAvatarImg: { width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.surfaceAlt },
+  headerAvatarEmoji: { fontSize: 20 },
+  headerTitleText: { color: COLORS.textPrimary, fontSize: 17, fontWeight: "bold", flexShrink: 1 },
   bubbleColMe: { alignItems: "flex-end", maxWidth: "75%" },
   bubbleColThem: { alignItems: "flex-start", maxWidth: "75%" },
   bubble: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10 },

@@ -2,47 +2,80 @@ import { db } from "./firebase";
 import { ref, set, get, onValue, off, push, remove } from "firebase/database";
 
 const BLOCKS = "blocks";
+const BLOCKED_BY = "blockedBy";
 const REPORTS = "reports";
 
 /**
- * Block another user. Writes blocks/{myUid}/{otherUid} with their nickname so
- * the BlockedUsersScreen can render without a second profile lookup.
+ * Block another user. Writes:
+ *   blocks/{myUid}/{otherUid}     — my block list (with nickname for the UI)
+ *   blockedBy/{otherUid}/{myUid}  — reverse index so the blocked user can also
+ *                                   filter me out (blocking is mutual in effect).
  *
- * Blocking is one-sided: the blocker stops seeing the blocked user across
- * Matches, Discover, and DMs. The other user is NOT notified.
+ * The other user is NOT notified; they just stop seeing me in Matches, Discover,
+ * and DMs — same as I stop seeing them.
  */
 export async function blockUser(myUid, otherUid, otherNickname = "") {
   if (!myUid || !otherUid || myUid === otherUid) return;
-  await set(ref(db, `${BLOCKS}/${myUid}/${otherUid}`), {
-    nickname: String(otherNickname).slice(0, 50),
-    blockedAt: Date.now(),
-  });
+  await Promise.all([
+    set(ref(db, `${BLOCKS}/${myUid}/${otherUid}`), {
+      nickname: String(otherNickname).slice(0, 50),
+      blockedAt: Date.now(),
+    }),
+    set(ref(db, `${BLOCKED_BY}/${otherUid}/${myUid}`), true),
+  ]);
 }
 
 export async function unblockUser(myUid, otherUid) {
   if (!myUid || !otherUid) return;
-  await remove(ref(db, `${BLOCKS}/${myUid}/${otherUid}`));
+  await Promise.all([
+    remove(ref(db, `${BLOCKS}/${myUid}/${otherUid}`)),
+    remove(ref(db, `${BLOCKED_BY}/${otherUid}/${myUid}`)),
+  ]);
 }
 
 /**
- * One-shot read of my blocked set — Set<uid>. Useful when filtering lists.
+ * One-shot read of everyone I can't see — both people I blocked and people who
+ * blocked me. Set<uid>. Used when filtering Discover.
  */
 export async function getBlockedUids(myUid) {
   if (!myUid) return new Set();
-  const snap = await get(ref(db, `${BLOCKS}/${myUid}`));
-  if (!snap.exists()) return new Set();
-  return new Set(Object.keys(snap.val() || {}));
+  const [mine, byOthers] = await Promise.all([
+    get(ref(db, `${BLOCKS}/${myUid}`)),
+    get(ref(db, `${BLOCKED_BY}/${myUid}`)),
+  ]);
+  return new Set([
+    ...Object.keys(mine.val() || {}),
+    ...Object.keys(byOthers.val() || {}),
+  ]);
 }
 
 /**
  * Real-time subscription to my blocked map — { uid: { nickname, blockedAt } }.
- * Returns unsubscribe.
+ * Only the people *I* blocked (drives BlockedUsersScreen). Returns unsubscribe.
  */
 export function subscribeToBlocks(myUid, onUpdate) {
   if (!myUid) return () => {};
   const r = ref(db, `${BLOCKS}/${myUid}`);
   onValue(r, (snap) => onUpdate(snap.val() ?? {}));
   return () => off(r);
+}
+
+/**
+ * Real-time subscription to the full hidden set (people I blocked ∪ people who
+ * blocked me) as a Set<uid>. Used to filter Matches and DM lists both ways.
+ * Returns unsubscribe.
+ */
+export function subscribeToHiddenUids(myUid, onUpdate) {
+  if (!myUid) return () => {};
+  const mineRef = ref(db, `${BLOCKS}/${myUid}`);
+  const byRef = ref(db, `${BLOCKED_BY}/${myUid}`);
+  let mine = {};
+  let byOthers = {};
+  const emit = () =>
+    onUpdate(new Set([...Object.keys(mine), ...Object.keys(byOthers)]));
+  onValue(mineRef, (snap) => { mine = snap.val() ?? {}; emit(); });
+  onValue(byRef, (snap) => { byOthers = snap.val() ?? {}; emit(); });
+  return () => { off(mineRef); off(byRef); };
 }
 
 /**

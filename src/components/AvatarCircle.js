@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, Image, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "@hooks/useTheme";
 
@@ -27,9 +27,10 @@ export function getInitials(name) {
 }
 
 /**
- * Circular avatar showing initials with auto-generated background colour.
+ * Circular avatar.
  *
  * Props:
+ *   photoUrl      – if set (and non-empty), renders an Image; everything below is ignored
  *   name          – used for initials and colour seed
  *   size          – diameter in dp (default 48)
  *   useGradient   – if true, applies pink→purple gradient background
@@ -38,6 +39,7 @@ export function getInitials(name) {
  *   style         – extra container style
  */
 export default function AvatarCircle({
+  photoUrl,
   name,
   size = 48,
   useGradient = false,
@@ -46,10 +48,23 @@ export default function AvatarCircle({
   style,
 }) {
   const COLORS = useTheme();
+  const radius = size / 2;
+
+  if (photoUrl) {
+    return (
+      <Image
+        source={{ uri: photoUrl }}
+        style={[
+          { width: size, height: size, borderRadius: radius, backgroundColor: COLORS.surfaceAlt },
+          style,
+        ]}
+      />
+    );
+  }
+
   const initials = getInitials(name);
   const bgColor = color ?? getAvatarColor(name);
   const fSize = fontSize ?? Math.round(size * 0.36);
-  const radius = size / 2;
 
   const textEl = (
     <Text style={[styles.initials, { fontSize: fSize }]}>{initials}</Text>

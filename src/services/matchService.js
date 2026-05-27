@@ -25,6 +25,9 @@ export async function likeUser(fromUid, toUid, score) {
         createdAt: Date.now(),
       });
     }
+    // Clear any stale "hidden" flag from a previous deleted-account session so
+    // a re-matched user sees the chat again instead of it staying hidden.
+    await remove(ref(db, `${MATCHES}/${mid}/hiddenFor/${fromUid}`)).catch(() => {});
     return mid;
   }
   return null;

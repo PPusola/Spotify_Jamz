@@ -7,7 +7,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { subscribeToDMList, getOrCreateDM } from "@services/dmService";
-import { subscribeToBlocks } from "@services/blockService";
+import { subscribeToHiddenUids } from "@services/blockService";
+import { db } from "@services/firebase";
+import { ref, get } from "firebase/database";
 import { useTheme } from "@hooks/useTheme";
 import { DMRowSkeleton } from "@components/Skeleton";
 
@@ -20,6 +22,7 @@ export default function DMListScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [blockedSet, setBlockedSet] = useState(new Set());
+  const [hiddenDmIds, setHiddenDmIds] = useState(new Set());
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -32,10 +35,33 @@ export default function DMListScreen({ navigation }) {
 
   useEffect(() => {
     if (!user?.uid) return;
-    return subscribeToBlocks(user.uid, (m) => setBlockedSet(new Set(Object.keys(m || {}))));
+    return subscribeToHiddenUids(user.uid, setBlockedSet);
   }, [user?.uid]);
 
-  const visibleConvos = convos.filter((c) => !blockedSet.has(c.otherUid));
+  // Refresh hidden-dm set whenever the convos list changes. The hidden flag is
+  // set when I previously deleted my account; if someone messages me afterwards
+  // their sendDM re-creates my userDMs entry, but we filter it back out here.
+  useEffect(() => {
+    if (!user?.uid || convos.length === 0) {
+      setHiddenDmIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const hidden = await Promise.all(
+        convos.map(async (c) => {
+          const snap = await get(ref(db, `dms/${c.dmId}/hiddenFor/${user.uid}`));
+          return snap.val() === true ? c.dmId : null;
+        })
+      );
+      if (!cancelled) setHiddenDmIds(new Set(hidden.filter(Boolean)));
+    })();
+    return () => { cancelled = true; };
+  }, [convos, user?.uid]);
+
+  const visibleConvos = convos.filter(
+    (c) => !blockedSet.has(c.otherUid) && !hiddenDmIds.has(c.dmId)
+  );
 
   // The DM list is driven by a realtime subscription, so a pull-to-refresh
   // is a no-op data-wise — we just show the spinner briefly so the gesture

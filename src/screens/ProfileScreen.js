@@ -13,9 +13,12 @@ import {
   updatePrivateProfile,
 } from "@services/userService";
 import { uploadProfilePhoto, deleteProfilePhoto } from "@services/photoService";
+import { deleteAccount } from "@services/accountService";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
 import { useTheme, useThemeControl } from "@hooks/useTheme";
+import { effectivePhotoUrl } from "@utils/photoVisibility";
+import { liveTrack } from "@utils/nowPlaying";
 import AvatarCircle from "@components/AvatarCircle";
 import GradientButton from "@components/GradientButton";
 
@@ -29,7 +32,7 @@ const EMOJI_OPTIONS = [
 ];
 
 export default function ProfileScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user, logout, spotifyToken } = useAuth();
   const { profile } = useProfile();
   const COLORS = useTheme();
   const { theme, setTheme } = useThemeControl();
@@ -167,6 +170,58 @@ export default function ProfileScreen({ navigation }) {
     await setTheme(next);
   };
 
+  const handleToggleSpotifyPhoto = async (next) => {
+    try {
+      await updateProfile(user.uid, { useSpotifyPhoto: next });
+    } catch (e) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
+  const handleToggleDiscoverPhoto = async (next) => {
+    try {
+      await updateProfile(user.uid, { showPhotoInDiscover: next });
+    } catch (e) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete account?",
+      "This permanently wipes your profile, matches, swipe history, blocks, and your side of every chat. People you've messaged will see you as “Deleted account.” This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Last chance",
+              "Tap Delete again to confirm. You'll be signed out immediately.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await deleteAccount(user.uid, spotifyToken);
+                    } catch (e) {
+                      Alert.alert("Couldn't delete", e?.message || "Unknown error");
+                      return;
+                    }
+                    await logout();
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const handleResetPassword = () => {
     Alert.alert(
       "Reset Spotify password?",
@@ -208,7 +263,7 @@ export default function ProfileScreen({ navigation }) {
             colors={[COLORS.gradientStart + "30", COLORS.gradientEnd + "30"]}
             style={styles.avatarGlow}
           >
-            <AvatarCircle name={profile.nickname} size={96} useGradient />
+            <AvatarCircle photoUrl={effectivePhotoUrl(profile, "chat")} name={profile.nickname} size={96} useGradient />
           </LinearGradient>
           <View style={styles.onlineDot} />
 
@@ -226,6 +281,12 @@ export default function ProfileScreen({ navigation }) {
             <Text style={styles.nickname}>{profile.nickname}</Text>
           )}
           <Text style={styles.spotifyName}>🎵 {profile.spotifyDisplayName}</Text>
+          {liveTrack(profile.nowPlaying) && (
+            <Text style={styles.nowPlaying} numberOfLines={1}>
+              🎧 {profile.nowPlaying.trackName}
+              {profile.nowPlaying.artistName ? ` · ${profile.nowPlaying.artistName}` : ""}
+            </Text>
+          )}
 
           {/* Edit · Stats action row */}
           <View style={styles.actionRow}>
@@ -449,6 +510,43 @@ export default function ProfileScreen({ navigation }) {
               />
             </View>
 
+            {/* Spotify photo as avatar */}
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingTitle}>🖼️ Spotify photo as avatar</Text>
+                <Text style={styles.settingSub}>
+                  {profile?.useSpotifyPhoto === false
+                    ? "Showing emoji avatar everywhere"
+                    : "Shown in matches, chats, and discover"}
+                </Text>
+              </View>
+              <Switch
+                value={profile?.useSpotifyPhoto !== false}
+                onValueChange={handleToggleSpotifyPhoto}
+                trackColor={{ false: COLORS.surfaceHigh, true: COLORS.primary }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            {/* Show photo on Discover */}
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingTitle}>🔍 Show photo on Discover</Text>
+                <Text style={styles.settingSub}>
+                  {profile?.showPhotoInDiscover === false
+                    ? "Strangers on Discover see only your emoji"
+                    : "Strangers swiping see your Spotify photo"}
+                </Text>
+              </View>
+              <Switch
+                value={profile?.showPhotoInDiscover !== false}
+                onValueChange={handleToggleDiscoverPhoto}
+                disabled={profile?.useSpotifyPhoto === false}
+                trackColor={{ false: COLORS.surfaceHigh, true: COLORS.primary }}
+                thumbColor="#fff"
+              />
+            </View>
+
             {/* Reset password */}
             <TouchableOpacity
               style={styles.settingRow}
@@ -484,6 +582,19 @@ export default function ProfileScreen({ navigation }) {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.settingTitle, { color: COLORS.error }]}>⇄ Log out</Text>
                 <Text style={styles.settingSub}>Sign out of Spotify and TuneMatch</Text>
+              </View>
+              <Text style={styles.settingChevron}>›</Text>
+            </TouchableOpacity>
+
+            {/* Delete account */}
+            <TouchableOpacity
+              style={styles.settingRow}
+              onPress={() => { setSettingsOpen(false); handleDeleteAccount(); }}
+              activeOpacity={0.7}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingTitle, { color: COLORS.error }]}>🗑️ Delete account</Text>
+                <Text style={styles.settingSub}>Permanently wipe your profile and data</Text>
               </View>
               <Text style={styles.settingChevron}>›</Text>
             </TouchableOpacity>
@@ -581,6 +692,7 @@ const makeStyles = (COLORS) => StyleSheet.create({
     marginBottom: 4,
   },
   spotifyName: { fontSize: 13, color: COLORS.textSecondary },
+  nowPlaying: { fontSize: 12, color: COLORS.liveGreen, marginTop: 6, maxWidth: 260, textAlign: "center" },
 
   section: { width: "100%", marginBottom: 20 },
   sectionLabel: {

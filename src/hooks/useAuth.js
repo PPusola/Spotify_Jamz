@@ -69,8 +69,10 @@ async function exchangeForFirebaseToken(spotifyAccessToken) {
 
 /**
  * Get or create the Firebase user that corresponds to this Spotify account.
- * Same Spotify id always maps to the same Firebase UID (spotify_<id>), so
- * profile data is preserved across devices and reinstalls.
+ * The worker maps each Spotify id to its current Firebase UID (default
+ * spotify_<id>), so profile data is preserved across devices and reinstalls.
+ * Deleting the account retires that mapping, so the next login mints a fresh
+ * UID instead of resurrecting the old one.
  */
 async function ensureFirebaseUser(spotifyAccessToken) {
   // Wait for AsyncStorage-backed persistence to hydrate; if a session is
