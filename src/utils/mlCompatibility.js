@@ -1,10 +1,11 @@
-// ML-based user compatibility:
-//   1. Build a numeric "taste vector" for each user from Spotify-derived data.
-//   2. Cluster all candidate users with K-Means (K-Means++ init).
-//   3. Score a pair = cosine_similarity(vec_a, vec_b) + small boost if they
-//      fall into the same cluster.
+// Music compatibility scoring (pure JS, on-device).
 //
-// Pure JS so it runs on-device — no Python / sklearn required.
+// We score *concrete overlap* rather than raw cosine similarity. Cosine alone
+// made everyone a 99% match: it measures the angle between L1-normalized genre
+// vectors, so any two people who broadly like mainstream genres point the same
+// way. Instead we blend shared top artists, shared genre buckets (Jaccard), and
+// a lightly-weighted genre-direction cosine, then map onto a believable band so
+// scores actually spread out across users.
 
 import { cosineSimilarity } from "./similarity";
 
@@ -76,141 +77,71 @@ export function buildUserVector(profile) {
   return vec;
 }
 
-// ─── K-Means clustering (K-Means++ init) ──────────────────────────────────────
+// ─── Overlap helpers ──────────────────────────────────────────────────────────
 
-function euclidean(a, b) {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; }
-  return Math.sqrt(s);
+function lowerSet(arr) {
+  return new Set(toArray(arr).map(x => String(x).toLowerCase().trim()).filter(Boolean));
 }
 
-function meanVector(vectors, dim) {
-  const out = new Array(dim).fill(0);
-  if (vectors.length === 0) return out;
-  for (const v of vectors) for (let i = 0; i < dim; i++) out[i] += v[i];
-  for (let i = 0; i < dim; i++) out[i] /= vectors.length;
-  return out;
-}
-
-/**
- * Pick initial centroids using K-Means++: first random, then each subsequent
- * centroid is sampled with probability proportional to D(x)² (distance to
- * nearest existing centroid). Produces tighter clusters than random init.
- */
-function kMeansPlusPlusInit(vectors, k, rand) {
-  const centroids = [vectors[Math.floor(rand() * vectors.length)].slice()];
-  while (centroids.length < k) {
-    const dists = vectors.map(v => {
-      let min = Infinity;
-      for (const c of centroids) {
-        const d = euclidean(v, c);
-        if (d < min) min = d;
-      }
-      return min * min;
-    });
-    const total = dists.reduce((s, d) => s + d, 0);
-    if (total === 0) { centroids.push(vectors[0].slice()); continue; }
-    let r = rand() * total;
-    let idx = 0;
-    for (; idx < dists.length - 1; idx++) {
-      r -= dists[idx];
-      if (r <= 0) break;
-    }
-    centroids.push(vectors[idx].slice());
+function genreBucketSet(genres) {
+  const s = new Set();
+  for (const g of toArray(genres)) {
+    const idx = bucketOf(g);
+    if (idx >= 0) s.add(idx);
   }
-  return centroids;
+  return s;
 }
 
-/**
- * Cluster vectors into k groups. Returns { labels, centroids }.
- *   labels[i]   = cluster index assigned to vectors[i]
- *   centroids[c] = mean vector of cluster c
- */
-export function kMeans(vectors, k, { maxIter = 20, seed = 42 } = {}) {
-  if (vectors.length === 0) return { labels: [], centroids: [] };
-  const dim = vectors[0].length;
-  const realK = Math.max(1, Math.min(k, vectors.length));
+// Genre-bucket portion of the vector only (drop popularity/diversity dims).
+function genreVector(profile) {
+  return buildUserVector(profile).slice(0, GENRE_BUCKETS.length);
+}
 
-  // Deterministic PRNG for reproducible clusters across renders
-  let s = seed;
-  const rand = () => {
-    s = (s * 1664525 + 1013904223) % 0x100000000;
-    return s / 0x100000000;
-  };
-
-  let centroids = kMeansPlusPlusInit(vectors, realK, rand);
-  let labels = new Array(vectors.length).fill(0);
-
-  for (let iter = 0; iter < maxIter; iter++) {
-    // Assign each vector to nearest centroid
-    let changed = false;
-    for (let i = 0; i < vectors.length; i++) {
-      let best = 0, bestDist = Infinity;
-      for (let c = 0; c < centroids.length; c++) {
-        const d = euclidean(vectors[i], centroids[c]);
-        if (d < bestDist) { bestDist = d; best = c; }
-      }
-      if (labels[i] !== best) { labels[i] = best; changed = true; }
-    }
-    if (!changed && iter > 0) break;
-
-    // Recompute centroids
-    const groups = Array.from({ length: realK }, () => []);
-    for (let i = 0; i < vectors.length; i++) groups[labels[i]].push(vectors[i]);
-    centroids = groups.map((g, c) =>
-      g.length > 0 ? meanVector(g, dim) : centroids[c]
-    );
-  }
-
-  return { labels, centroids };
+function intersectionSize(a, b) {
+  let n = 0;
+  for (const x of a) if (b.has(x)) n++;
+  return n;
 }
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
 
-const SAME_CLUSTER_BOOST = 0.1;
-
 /**
- * Heuristic for k: roughly sqrt(N/2), clamped to [2, 6].
- * Small candidate pools cluster poorly with large k.
+ * Realistic music compatibility in [0,1]. Blends:
+ *   - shared top artists  (50%) — strongest, most intuitive signal
+ *   - shared genre buckets (30%) — Jaccard overlap
+ *   - genre emphasis       (20%) — cosine direction, lightly weighted
+ * then maps onto ~25–96% so even taste twins rarely read a literal 100% and
+ * strangers still get a non-zero baseline. Returns a spread, not 99% for all.
  */
-function pickK(n) {
-  return Math.max(2, Math.min(6, Math.round(Math.sqrt(n / 2))));
+export function realisticMatchScore(me, them) {
+  const sharedArtists = intersectionSize(lowerSet(me?.topArtists), lowerSet(them?.topArtists));
+  // 4+ shared top artists is a very strong signal → full marks on this component
+  const artistScore = sharedArtists === 0 ? 0 : Math.min(1, sharedArtists / 4);
+
+  const myGenres = genreBucketSet(me?.topGenres);
+  const themGenres = genreBucketSet(them?.topGenres);
+  const unionG = new Set([...myGenres, ...themGenres]).size;
+  const genreJaccard = unionG === 0 ? 0 : intersectionSize(myGenres, themGenres) / unionG;
+
+  const genreCos = cosineSimilarity(genreVector(me), genreVector(them));
+
+  const raw = 0.5 * artistScore + 0.3 * genreJaccard + 0.2 * genreCos;
+  const pct = 25 + raw * 71;
+  return Math.max(0.1, Math.min(0.96, pct / 100));
 }
 
-/**
- * Score a single candidate against the current user.
- * Use mlScoreCandidates() for batch scoring — clustering is shared across calls.
- */
+/** Back-compat single-pair scorer. */
 export function mlMatchScore(meProfile, themProfile) {
-  const a = buildUserVector(meProfile);
-  const b = buildUserVector(themProfile);
-  return cosineSimilarity(a, b);
+  return realisticMatchScore(meProfile, themProfile);
 }
 
 /**
- * Score a list of candidates against the current user using clustering.
- * Returns the same array of candidates with an added `score` field in [0,1],
- * sorted by score descending.
- *
- * Flow (mirrors sklearn KMeans + cosine_similarity):
- *   1. Build vectors for [me, ...candidates]
- *   2. Cluster all of them with K-Means
- *   3. score = cosine(me, them) + 0.1 if same cluster, clamped to 1
+ * Score a list of candidates against the current user. Returns each candidate
+ * with an added `score` field in [0,1], sorted by score descending.
  */
 export function mlScoreCandidates(meProfile, candidates) {
   if (!candidates || candidates.length === 0) return [];
-
-  const vectors = [buildUserVector(meProfile), ...candidates.map(buildUserVector)];
-  const { labels } = kMeans(vectors, pickK(vectors.length));
-  const meVec = vectors[0];
-  const meCluster = labels[0];
-
   return candidates
-    .map((c, i) => {
-      const themVec = vectors[i + 1];
-      const sim = cosineSimilarity(meVec, themVec);
-      const boost = labels[i + 1] === meCluster ? SAME_CLUSTER_BOOST : 0;
-      return { ...c, score: Math.min(1, sim + boost), cluster: labels[i + 1] };
-    })
+    .map(c => ({ ...c, score: realisticMatchScore(meProfile, c) }))
     .sort((a, b) => b.score - a.score);
 }
