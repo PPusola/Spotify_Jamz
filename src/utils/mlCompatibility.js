@@ -136,6 +136,28 @@ export function mlMatchScore(meProfile, themProfile) {
 }
 
 /**
+ * The concrete overlap behind a score — shared top artists and shared genres
+ * (exact, case-insensitive), preserving the other user's display casing.
+ * Used by the profile view to explain *why* two people match.
+ */
+export function sharedTaste(me, them) {
+  const overlap = (mineRaw, theirsRaw) => {
+    const theirs = new Set(toArray(theirsRaw).map(x => String(x).toLowerCase().trim()));
+    const out = [];
+    const seen = new Set();
+    for (const x of toArray(mineRaw)) {
+      const k = String(x).toLowerCase().trim();
+      if (k && theirs.has(k) && !seen.has(k)) { out.push(x); seen.add(k); }
+    }
+    return out;
+  };
+  return {
+    artists: overlap(me?.topArtists, them?.topArtists).slice(0, 6),
+    genres: overlap(me?.topGenres, them?.topGenres).slice(0, 6),
+  };
+}
+
+/**
  * Score a list of candidates against the current user. Returns each candidate
  * with an added `score` field in [0,1], sorted by score descending.
  */

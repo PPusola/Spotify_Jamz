@@ -313,7 +313,18 @@ export default function DiscoverScreen({ navigation }) {
               <Text style={styles.stampPassText}>PASS</Text>
             </Animated.View>
 
-            <CardContent card={current} vibe={vibe} score={current.score} />
+            <CardContent
+              card={current}
+              vibe={vibe}
+              score={current.score}
+              onViewProfile={() => navigation.navigate("UserProfile", {
+                profile: current,
+                score: current.score,
+                mode: "discover",
+                onLike: () => doLike(current),
+                onPass: () => doPass(current),
+              })}
+            />
           </Animated.View>
         </PanGestureHandler>
       </View>
@@ -379,7 +390,7 @@ export default function DiscoverScreen({ navigation }) {
   );
 }
 
-function CardContent({ card, vibe, score }) {
+function CardContent({ card, vibe, score, onViewProfile }) {
   const COLORS = useTheme();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
   const toArr = v => Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : []);
@@ -461,6 +472,12 @@ function CardContent({ card, vibe, score }) {
               </View>
             ))}
           </View>
+        )}
+
+        {onViewProfile && (
+          <TouchableOpacity style={styles.viewProfileBtn} onPress={onViewProfile} activeOpacity={0.7}>
+            <Text style={styles.viewProfileText}>ⓘ View full profile</Text>
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -562,6 +579,8 @@ const makeStyles = (COLORS) => StyleSheet.create({
   chipText: { color: COLORS.textSecondary, fontSize: 12 },
   genreChip: { backgroundColor: COLORS.secondary + "22", borderWidth: 1, borderColor: COLORS.secondary + "44" },
   genreChipText: { color: COLORS.secondary, fontSize: 12 },
+  viewProfileBtn: { marginTop: 14, alignSelf: "center", paddingVertical: 8, paddingHorizontal: 18, borderRadius: 50, borderWidth: 1, borderColor: COLORS.surfaceAlt, backgroundColor: COLORS.surfaceAlt },
+  viewProfileText: { color: COLORS.textSecondary, fontSize: 13, fontWeight: "600" },
 
   actions: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 20, paddingTop: 12 },
   passBtn: {

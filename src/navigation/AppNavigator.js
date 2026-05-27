@@ -26,6 +26,7 @@ import MixtapeScreen from "@screens/MixtapeScreen";
 import DMListScreen from "@screens/DMListScreen";
 import DMChatScreen from "@screens/DMChatScreen";
 import BlockedUsersScreen from "@screens/BlockedUsersScreen";
+import UserProfileScreen from "@screens/UserProfileScreen";
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -198,6 +199,7 @@ export default function AppNavigator() {
               })}
             />
             <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="UserProfile" component={UserProfileScreen} options={{ headerShown: false }} />
           </>
         )}
       </Stack.Navigator>

@@ -94,22 +94,34 @@ export default function MatchesScreen({ navigation }) {
     const isJamming = joiningId === item.id;
     const np = liveTrack(item.other?.nowPlaying);
 
+    const openProfile = () => {
+      if (item.other?.deleted) return;
+      navigation.navigate("UserProfile", {
+        profile: item.other,
+        score: (item.score ?? 0) / 100,
+        matchId: item.id,
+        mode: "match",
+      });
+    };
+
     return (
       <View style={styles.card}>
-        <AvatarCircle
-          photoUrl={effectivePhotoUrl(item.other, "chat")}
-          name={item.other?.nickname}
-          size={52}
-        />
+        <TouchableOpacity style={styles.tapZone} onPress={openProfile} activeOpacity={0.7}>
+          <AvatarCircle
+            photoUrl={effectivePhotoUrl(item.other, "chat")}
+            name={item.other?.nickname}
+            size={52}
+          />
 
-        <View style={styles.info}>
-          <Text style={styles.nickname}>{item.other?.nickname}</Text>
-          {np && (
-            <Text style={styles.nowPlaying} numberOfLines={1}>
-              🎧 {np.trackName}{np.artistName ? ` · ${np.artistName}` : ""}
-            </Text>
-          )}
-        </View>
+          <View style={styles.info}>
+            <Text style={styles.nickname}>{item.other?.nickname}</Text>
+            {np && (
+              <Text style={styles.nowPlaying} numberOfLines={1}>
+                🎧 {np.trackName}{np.artistName ? ` · ${np.artistName}` : ""}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.cardActions}>
           <TouchableOpacity
@@ -186,6 +198,7 @@ const makeStyles = (COLORS) => StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  tapZone: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
   info: { flex: 1 },
   nickname: { color: COLORS.textPrimary, fontSize: 16, fontWeight: "bold" },
   nowPlaying: { color: COLORS.liveGreen, fontSize: 11, marginTop: 5 },
