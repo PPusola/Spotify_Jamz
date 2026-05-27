@@ -2,6 +2,7 @@ import { db } from "./firebase";
 import { ref, set, get, push, onValue, off, update, remove } from "firebase/database";
 
 const LIKES = "likes";
+const LIKED_BY = "likedBy";
 const PASSED = "passed";
 const MATCHES = "matches";
 
@@ -11,6 +12,9 @@ function makeMatchId(uid1, uid2) {
 
 export async function likeUser(fromUid, toUid, score) {
   await set(ref(db, `${LIKES}/${fromUid}/${toUid}`), true);
+  // Reverse index so the recipient can see "who liked you" without scanning
+  // every user's likes list (their own likes list isn't readable by others).
+  await set(ref(db, `${LIKED_BY}/${toUid}/${fromUid}`), true).catch(() => {});
 
   const snap = await get(ref(db, `${LIKES}/${toUid}/${fromUid}`));
   if (snap.val() === true) {
@@ -35,6 +39,17 @@ export async function likeUser(fromUid, toUid, score) {
 
 export async function passUser(fromUid, toUid) {
   await set(ref(db, `${PASSED}/${fromUid}/${toUid}`), true);
+}
+
+/**
+ * Set of uids who have liked me — drives the "who liked you" teaser. Combine
+ * with getAlreadySeen to find pending admirers I haven't acted on yet.
+ */
+export async function getAdmirers(uid) {
+  if (!uid) return new Set();
+  const snap = await get(ref(db, `${LIKED_BY}/${uid}`));
+  if (!snap.exists()) return new Set();
+  return new Set(Object.keys(snap.val() || {}));
 }
 
 export async function getAlreadySeen(uid) {

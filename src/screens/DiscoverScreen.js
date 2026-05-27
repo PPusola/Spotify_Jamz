@@ -7,7 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { PanGestureHandler, State } from "react-native-gesture-handler";
 import { useAuth } from "@hooks/useAuth";
 import { useProfile } from "@hooks/useProfile";
-import { getPublicUsers, getAlreadySeen, likeUser, passUser } from "@services/matchService";
+import { getPublicUsers, getAlreadySeen, likeUser, passUser, getAdmirers } from "@services/matchService";
 import { generateAndSaveMixtape } from "@services/mixtapeService";
 import { sendPush } from "@services/pushService";
 import { getBlockedUids } from "@services/blockService";
@@ -80,16 +80,26 @@ export default function DiscoverScreen({ navigation }) {
     if (!user?.uid || !profile) return;
     setLoading(true);
     try {
-      const [users, seen, blocked] = await Promise.all([
+      const [users, seen, blocked, admirers] = await Promise.all([
         getPublicUsers(user.uid),
         getAlreadySeen(user.uid),
         getBlockedUids(user.uid),
+        getAdmirers(user.uid),
       ]);
       const unseen = users.filter(u => !seen.has(u.uid) && !blocked.has(u.uid));
       // ML-based compatibility: vectorize all users, K-Means cluster them,
       // then rank by cosine similarity + same-cluster boost.
-      const scored = mlScoreCandidates(profile, unseen);
-      setCards(scored);
+      const scored = mlScoreCandidates(profile, unseen).map(c => ({
+        ...c,
+        likedYou: admirers.has(c.uid),
+      }));
+      // Boost people who already liked you to the front — swiping right on them
+      // is an instant match, which makes the "who liked you" teaser actionable.
+      const ordered = [
+        ...scored.filter(c => c.likedYou),
+        ...scored.filter(c => !c.likedYou),
+      ];
+      setCards(ordered);
       setIndex(0);
     } finally {
       setLoading(false);
@@ -105,6 +115,8 @@ export default function DiscoverScreen({ navigation }) {
 
   const current = cards[index];
   const next = cards[index + 1];
+  // Admirers still ahead in the deck — drives the "who liked you" teaser count.
+  const remainingAdmirers = cards.slice(index).filter(c => c.likedYou).length;
 
   const doLike = useCallback(async (card) => {
     setActing(true);
@@ -254,6 +266,27 @@ export default function DiscoverScreen({ navigation }) {
   return (
     <View style={styles.container}>
 
+      {/* "Who liked you" teaser */}
+      {remainingAdmirers > 0 && (
+        <View style={styles.admirerBanner}>
+          <View style={styles.admirerPeek}>
+            {Array.from({ length: Math.min(remainingAdmirers, 4) }).map((_, i) => (
+              <LinearGradient
+                key={i}
+                colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={[styles.admirerDot, { marginLeft: i === 0 ? 0 : -10 }]}
+              >
+                <Text style={styles.admirerDotText}>💜</Text>
+              </LinearGradient>
+            ))}
+          </View>
+          <Text style={styles.admirerText}>
+            {remainingAdmirers} {remainingAdmirers === 1 ? "person likes" : "people like"} you · keep swiping to match
+          </Text>
+        </View>
+      )}
+
       {/* Card stack */}
       <View style={styles.stack}>
         {next && (
@@ -362,6 +395,11 @@ function CardContent({ card, vibe, score }) {
         colors={[COLORS.cardBannerStart, COLORS.cardBannerEnd, COLORS.background]}
         style={styles.cardHeader}
       >
+        {card.likedYou && (
+          <View style={styles.likesYouPill}>
+            <Text style={styles.likesYouText}>💜 Likes you</Text>
+          </View>
+        )}
         {vibe && (
           <View style={styles.vibeTopPill}>
             <Text style={styles.vibeTopText}>🌙 {vibe}</Text>
@@ -461,6 +499,29 @@ const makeStyles = (COLORS) => StyleSheet.create({
   },
   vibeTopText: { color: COLORS.textSecondary, fontSize: 12 },
   cardAvatar: { marginTop: 8 },
+
+  likesYouPill: {
+    position: "absolute", top: 14, left: 14,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: 1, borderColor: COLORS.primary + "88",
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
+  },
+  likesYouText: { color: COLORS.primary, fontSize: 12, fontWeight: "800" },
+
+  admirerBanner: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: COLORS.surface, borderRadius: 16,
+    paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10,
+    borderWidth: 1, borderColor: COLORS.primary + "33",
+  },
+  admirerPeek: { flexDirection: "row", alignItems: "center" },
+  admirerDot: {
+    width: 30, height: 30, borderRadius: 15,
+    justifyContent: "center", alignItems: "center",
+    borderWidth: 2, borderColor: COLORS.surface,
+  },
+  admirerDotText: { fontSize: 13 },
+  admirerText: { flex: 1, color: COLORS.textSecondary, fontSize: 12, fontWeight: "600" },
 
   cardBody: { flex: 1, padding: 20, paddingTop: 16 },
   nameCompatRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },

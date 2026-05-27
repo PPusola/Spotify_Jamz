@@ -59,6 +59,16 @@
       }
     },
 
+    "likedBy": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$fromUid": {
+          ".write": "auth != null && auth.uid === $fromUid",
+          ".validate": "newData.isBoolean()"
+        }
+      }
+    },
+
     "matches": {
       ".read": "auth != null",
 
